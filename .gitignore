@@ -1,0 +1,8 @@
+/target
+/*.lock
+*.ignore
+*.txt
+*.so
+**/__pycache__/*
+**/profiles/*
+**/plots/*
