@@ -1,4 +1,4 @@
-use crate::{bpsk::tx_bpsk_signal, chaos::LogisticMap, fftshift, iter::Iter, no_nans, Bit};
+use crate::{chaos::LogisticMap, fftshift, iter::Iter, no_nans, psk::tx_bpsk_signal, Bit};
 use rand::prelude::*;
 use rustfft::num_traits::Zero;
 use rustfft::{num_complex::Complex, FftPlanner};

@@ -1,4 +1,4 @@
-use bazbandilo::bpsk::{rx_bpsk_signal, tx_bpsk_signal};
+use bazbandilo::psk::{rx_bpsk_signal, tx_bpsk_signal};
 use bazbandilo::{awgn, Bit};
 
 use num::complex::Complex;

@@ -9,7 +9,6 @@ use rand::Rng;
 use rand_distr::{Distribution, Normal};
 
 mod bch;
-pub mod bpsk;
 pub mod cdma;
 pub mod chaos;
 pub mod csk;
@@ -22,18 +21,18 @@ pub mod fsk;
 pub mod hadamard;
 pub mod iter;
 pub mod ofdm;
-pub mod qpsk;
+pub mod psk;
 pub mod ssca;
 mod util;
 
-use crate::bpsk::{rx_bpsk_signal, tx_bpsk_signal};
-// use crate::cdma::{rx_cdma_bpsk_signal, tx_cdma_bpsk_signal};
+use crate::cdma::{rx_cdma_bpsk_signal, tx_cdma_bpsk_signal};
 use crate::fh_css::{linear_chirp, tx_fh_css_signal};
+use crate::psk::{rx_bpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_qpsk_signal};
 // use crate::fh_ofdm_dcsk::tx_fh_ofdm_dcsk_signal;
 use crate::fsk::tx_bfsk_signal;
+use crate::hadamard::HadamardMatrix;
 use crate::iter::Iter;
 use crate::ofdm::{rx_ofdm_signal, tx_ofdm_signal};
-use crate::qpsk::{rx_qpsk_signal, tx_qpsk_signal};
 use crate::ssca::{ssca_base, ssca_mapped};
 
 pub type Bit = bool;
@@ -419,21 +418,21 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
         rx_qpsk_signal(rx_ofdm_signal(signal.into_iter(), subcarriers, pilots)).collect()
     }
 
-    // #[pyfunction]
-    // #[pyo3(signature=(message, key_len=16))]
-    // fn tx_cdma_bpsk(message: Vec<Bit>, key_len: usize) -> Vec<Complex<f64>> {
-    //     let walsh_codes = HadamardMatrix::new(key_len);
-    //     let key: Vec<Bit> = walsh_codes.key(0).clone();
-    //     tx_cdma_bpsk_signal(message.into_iter(), &key).collect()
-    // }
+    #[pyfunction]
+    #[pyo3(signature=(message, key_len=16))]
+    fn tx_cdma_bpsk(message: Vec<Bit>, key_len: usize) -> Vec<Complex<f64>> {
+        let walsh_codes = HadamardMatrix::new(key_len);
+        let key: Vec<Bit> = walsh_codes.key(0).clone();
+        tx_cdma_bpsk_signal(message.into_iter(), &key).collect()
+    }
 
-    // #[pyfunction]
-    // #[pyo3(signature=(signal, key_len=16))]
-    // fn rx_cdma_bpsk(signal: Vec<Complex<f64>>, key_len: usize) -> Vec<Bit> {
-    //     let walsh_codes = HadamardMatrix::new(key_len);
-    //     let key: Vec<Bit> = walsh_codes.key(0).clone();
-    //     rx_cdma_bpsk_signal(signal.into_iter(), &key).collect()
-    // }
+    #[pyfunction]
+    #[pyo3(signature=(signal, key_len=16))]
+    fn rx_cdma_bpsk(signal: Vec<Complex<f64>>, key_len: usize) -> Vec<Bit> {
+        let walsh_codes = HadamardMatrix::new(key_len);
+        let key: Vec<Bit> = walsh_codes.key(0).clone();
+        rx_cdma_bpsk_signal(signal.into_iter(), &key).collect()
+    }
 
     #[pyfunction]
     fn tx_bfsk_baseband(data: Vec<Bit>, delta_f: usize) -> Vec<Complex<f64>> {
@@ -468,6 +467,8 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rx_qpsk, m)?)?;
     m.add_function(wrap_pyfunction!(tx_qpsk, m)?)?;
     m.add_function(wrap_pyfunction!(rx_qpsk, m)?)?;
+    m.add_function(wrap_pyfunction!(tx_cdma_bpsk, m)?)?;
+    m.add_function(wrap_pyfunction!(rx_cdma_bpsk, m)?)?;
     m.add_function(wrap_pyfunction!(tx_ofdm_qpsk, m)?)?;
     m.add_function(wrap_pyfunction!(rx_ofdm_qpsk, m)?)?;
     m.add_function(wrap_pyfunction!(tx_bfsk_baseband, m)?)?;

@@ -51,7 +51,7 @@ pub fn rx_cdma_bpsk_signal<'a, I: Iterator<Item = Complex<f64>> + 'a>(
     signal: I,
     key: &'a [Bit],
 ) -> impl Iterator<Item = Bit> + '_ {
-    rx_cdma(signal.map(|s_i| s_i.re < 0f64), key)
+    rx_cdma(signal.map(|s_i| s_i.re > 0f64), key)
 }
 
 #[cfg(test)]
@@ -83,6 +83,32 @@ mod tests {
         let cdma_tx: Vec<Bit> = tx_cdma(data_bits.clone().into_iter(), &key).collect();
 
         let cdma_rx: Vec<Bit> = rx_cdma(cdma_tx.clone().into_iter(), &key.clone()).collect();
+
+        assert_eq!(data_bits, cdma_rx);
+    }
+
+    #[rstest]
+    #[case(2)]
+    #[case(4)]
+    #[case(8)]
+    #[case(16)]
+    #[case(256)]
+    fn cdma_bpsk(#[case] matrix_size: usize) {
+        let num_bits = 16960;
+
+        let walsh_codes = HadamardMatrix::new(matrix_size);
+        let key: Vec<Bit> = walsh_codes.key(0).clone();
+
+        // Data bits.
+        let mut rng = rand::thread_rng();
+        let data_bits: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+
+        // TX CDMA.
+        let cdma_tx: Vec<Complex<f64>> =
+            tx_cdma_bpsk_signal(data_bits.clone().into_iter(), &key).collect();
+
+        let cdma_rx: Vec<Bit> =
+            rx_cdma_bpsk_signal(cdma_tx.clone().into_iter(), &key.clone()).collect();
 
         assert_eq!(data_bits, cdma_rx);
     }

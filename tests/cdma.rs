@@ -1,7 +1,7 @@
-use bazbandilo::bpsk::tx_bpsk_signal;
 use bazbandilo::cdma::{rx_cdma_bpsk_signal, tx_cdma_bpsk_signal};
 use bazbandilo::hadamard::HadamardMatrix;
 use bazbandilo::iter::Iter;
+use bazbandilo::psk::tx_bpsk_signal;
 use bazbandilo::{awgn, bit_to_nrz, Bit};
 
 use num::complex::Complex;

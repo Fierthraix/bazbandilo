@@ -1,6 +1,6 @@
-use bazbandilo::bpsk::tx_bpsk_signal;
 use bazbandilo::cdma::tx_cdma_bpsk_signal;
 use bazbandilo::hadamard::HadamardMatrix;
+use bazbandilo::psk::tx_bpsk_signal;
 use bazbandilo::{avg_energy, awgn, linspace, Bit};
 
 use num::complex::Complex;

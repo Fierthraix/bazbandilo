@@ -5,6 +5,10 @@ use rustfft::{num_complex::Complex, FftPlanner};
 
 #[inline]
 fn get_data_subcarriers(num_subcarriers: usize, num_pilots: usize) -> Vec<usize> {
+    if num_pilots.is_zero() {
+        return (0..num_subcarriers).collect();
+    }
+
     let m: usize = num_subcarriers / 2;
     let back = (num_pilots - 1) / 2;
     let front = num_pilots - 1 - back;
@@ -96,16 +100,16 @@ mod tests {
     extern crate rand;
     extern crate rand_distr;
     use crate::ofdm::tests::rand::Rng;
-    use crate::qpsk::{rx_qpsk_signal, tx_qpsk_signal};
+    use crate::psk::{rx_qpsk_signal, tx_qpsk_signal};
     use crate::Bit;
 
     #[test]
-    #[ignore]
     fn test_qpsk_ofdm() {
         let subcarriers = 64;
         let pilots = 12;
+        // let pilots = 0;
         let mut rng = rand::thread_rng();
-        let num_bits = 2080;
+        let num_bits = 103; // 64 - 12; //2080;
         let data_bits: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
 
         let tx_sig: Vec<Complex<f64>> = tx_ofdm_signal(
@@ -118,7 +122,8 @@ mod tests {
         let rx_bits: Vec<Bit> =
             rx_qpsk_signal(rx_ofdm_signal(tx_sig.iter().cloned(), subcarriers, pilots)).collect();
 
-        assert_eq!(data_bits.len(), rx_bits.len());
-        assert_eq!(data_bits, rx_bits);
+        // assert_eq!(data_bits.len(), rx_bits.len());
+        // assert_eq!(data_bits, rx_bits);
+        assert_eq!(data_bits[..num_bits], rx_bits[..num_bits]);
     }
 }

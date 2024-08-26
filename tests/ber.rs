@@ -1,12 +1,11 @@
 #![allow(unused_variables, non_upper_case_globals)]
 use bazbandilo::{
-    bpsk::{rx_bpsk_signal, tx_bpsk_signal},
     // cdma::{rx_cdma_bpsk_signal, tx_cdma_bpsk_signal},
     db,
     erfc,
     linspace,
     ofdm::{rx_ofdm_signal, tx_ofdm_signal},
-    qpsk::{rx_qpsk_signal, tx_qpsk_signal},
+    psk::{rx_bpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_qpsk_signal},
     undb,
     Bit,
 };

@@ -1,9 +1,8 @@
 #![allow(non_upper_case_globals)]
-use bazbandilo::bpsk::tx_bpsk_signal;
+use bazbandilo::psk::{tx_bpsk_signal, tx_qpsk_signal};
 // use bazbandilo::cdma::{tx_cdma_bpsk_signal, tx_cdma_qpsk_signal};
 use bazbandilo::fsk::tx_bfsk_signal;
 // use bazbandilo::hadamard::HadamardMatrix;
-use bazbandilo::qpsk::tx_qpsk_signal;
 use bazbandilo::{avg_energy, Bit};
 
 use num::complex::Complex;

@@ -1,5 +1,5 @@
 use bazbandilo::ofdm::{rx_ofdm_signal, tx_ofdm_signal};
-use bazbandilo::qpsk::{rx_qpsk_signal, tx_qpsk_signal};
+use bazbandilo::psk::{rx_qpsk_signal, tx_qpsk_signal};
 use bazbandilo::Bit;
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
