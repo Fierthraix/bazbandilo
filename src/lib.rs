@@ -22,14 +22,18 @@ pub mod hadamard;
 pub mod iter;
 pub mod ofdm;
 pub mod psk;
+pub mod qam;
 pub mod ssca;
 mod util;
 
-use crate::cdma::{rx_cdma_bpsk_signal, tx_cdma_bpsk_signal};
+use crate::cdma::{
+    rx_cdma_bpsk_signal, rx_cdma_qpsk_signal, tx_cdma_bpsk_signal, tx_cdma_qpsk_signal,
+};
 use crate::fh_css::{linear_chirp, tx_fh_css_signal};
 use crate::psk::{rx_bpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_qpsk_signal};
+use crate::qam::{rx_qam_signal, tx_qam_signal};
 // use crate::fh_ofdm_dcsk::tx_fh_ofdm_dcsk_signal;
-use crate::fsk::tx_bfsk_signal;
+use crate::fsk::{rx_bfsk_signal, tx_bfsk_signal};
 use crate::hadamard::HadamardMatrix;
 use crate::iter::Iter;
 use crate::ofdm::{rx_ofdm_signal, tx_ofdm_signal};
@@ -114,7 +118,7 @@ pub fn undb(x: f64) -> f64 {
 
 #[inline]
 pub fn linspace(start: f64, stop: f64, num: usize) -> impl Iterator<Item = f64> {
-    let step = (stop - start) / (num as f64);
+    let step = (stop - start) / ((num - 1) as f64);
     (0..num).map(move |i| start + step * (i as f64))
 }
 
@@ -345,14 +349,30 @@ fn awgn_py(signal: Vec<Complex<f64>>, sigma: f64) -> Vec<Complex<f64>> {
     signal
         .into_iter()
         .zip(
-            // Normal::new(0f64, sigma / 2f64)
             Normal::new(0f64, sigma)
                 .unwrap()
                 .sample_iter(rand::thread_rng()),
         )
         .zip(
-            // Normal::new(0f64, sigma / 2f64)
             Normal::new(0f64, sigma)
+                .unwrap()
+                .sample_iter(rand::thread_rng()),
+        )
+        .map(|((sample, n_1), n_2)| sample + Complex::new(n_1, n_2))
+        .collect()
+}
+
+#[pyfunction]
+fn awgn2(signal: Vec<Complex<f64>>, sigma: f64) -> Vec<Complex<f64>> {
+    signal
+        .into_iter()
+        .zip(
+            Normal::new(0f64, sigma / 2f64)
+                .unwrap()
+                .sample_iter(rand::thread_rng()),
+        )
+        .zip(
+            Normal::new(0f64, sigma / 2f64)
                 .unwrap()
                 .sample_iter(rand::thread_rng()),
         )
@@ -435,8 +455,39 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfunction]
-    fn tx_bfsk_baseband(data: Vec<Bit>, delta_f: usize) -> Vec<Complex<f64>> {
+    #[pyo3(signature=(message, key_len=16))]
+    fn tx_cdma_qpsk(message: Vec<Bit>, key_len: usize) -> Vec<Complex<f64>> {
+        let walsh_codes = HadamardMatrix::new(key_len);
+        let key: Vec<Bit> = walsh_codes.key(0).clone();
+        tx_cdma_qpsk_signal(message.into_iter(), &key).collect()
+    }
+
+    #[pyfunction]
+    #[pyo3(signature=(signal, key_len=16))]
+    fn rx_cdma_qpsk(signal: Vec<Complex<f64>>, key_len: usize) -> Vec<Bit> {
+        let walsh_codes = HadamardMatrix::new(key_len);
+        let key: Vec<Bit> = walsh_codes.key(0).clone();
+        rx_cdma_qpsk_signal(signal.into_iter(), &key).collect()
+    }
+
+    #[pyfunction]
+    fn tx_bfsk(data: Vec<Bit>, delta_f: usize) -> Vec<Complex<f64>> {
         tx_bfsk_signal(data.into_iter(), delta_f).collect()
+    }
+
+    #[pyfunction]
+    fn rx_bfsk(signal: Vec<Complex<f64>>, delta_f: usize) -> Vec<Bit> {
+        rx_bfsk_signal(signal.into_iter(), delta_f).collect()
+    }
+
+    #[pyfunction]
+    fn tx_qam(data: Vec<Bit>, m: usize) -> Vec<Complex<f64>> {
+        tx_qam_signal(data.into_iter(), m).collect()
+    }
+
+    #[pyfunction]
+    fn rx_qam(signal: Vec<Complex<f64>>, m: usize) -> Vec<Bit> {
+        rx_qam_signal(signal.into_iter(), m).collect()
     }
 
     #[pyfunction]
@@ -461,20 +512,22 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_function(wrap_pyfunction!(tx_bpsk, m)?)?;
     m.add_function(wrap_pyfunction!(rx_bpsk, m)?)?;
-    m.add_function(wrap_pyfunction!(tx_bpsk, m)?)?;
-    m.add_function(wrap_pyfunction!(rx_bpsk, m)?)?;
-    m.add_function(wrap_pyfunction!(tx_qpsk, m)?)?;
-    m.add_function(wrap_pyfunction!(rx_qpsk, m)?)?;
     m.add_function(wrap_pyfunction!(tx_qpsk, m)?)?;
     m.add_function(wrap_pyfunction!(rx_qpsk, m)?)?;
     m.add_function(wrap_pyfunction!(tx_cdma_bpsk, m)?)?;
     m.add_function(wrap_pyfunction!(rx_cdma_bpsk, m)?)?;
+    m.add_function(wrap_pyfunction!(tx_cdma_qpsk, m)?)?;
+    m.add_function(wrap_pyfunction!(rx_cdma_qpsk, m)?)?;
     m.add_function(wrap_pyfunction!(tx_ofdm_qpsk, m)?)?;
     m.add_function(wrap_pyfunction!(rx_ofdm_qpsk, m)?)?;
-    m.add_function(wrap_pyfunction!(tx_bfsk_baseband, m)?)?;
+    m.add_function(wrap_pyfunction!(tx_bfsk, m)?)?;
+    m.add_function(wrap_pyfunction!(rx_bfsk, m)?)?;
+    m.add_function(wrap_pyfunction!(tx_qam, m)?)?;
+    m.add_function(wrap_pyfunction!(rx_qam, m)?)?;
     m.add_function(wrap_pyfunction!(tx_fh_css, m)?)?;
     m.add_function(wrap_pyfunction!(random_data, m)?)?;
     m.add_function(wrap_pyfunction!(awgn_py, m)?)?;
+    m.add_function(wrap_pyfunction!(awgn2, m)?)?;
     m.add_function(wrap_pyfunction!(pure_awgn, m)?)?;
     m.add_function(wrap_pyfunction!(chirp, m)?)?;
     m.add_function(wrap_pyfunction!(energy_detector, m)?)?;
