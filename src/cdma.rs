@@ -1,4 +1,5 @@
-use crate::{bit_to_nrz, iter::Iter, Bit};
+use crate::psk::{rx_bpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_qpsk_signal};
+use crate::{iter::Iter, Bit};
 
 use num_complex::Complex;
 
@@ -43,7 +44,7 @@ pub fn tx_cdma_bpsk_signal<'a, I: Iterator<Item = Bit> + 'a>(
     message: I,
     key: &'a [Bit],
 ) -> impl Iterator<Item = Complex<f64>> + 'a {
-    tx_cdma(message, key).map(|bit| Complex::new(bit_to_nrz(bit), 0f64))
+    tx_bpsk_signal(tx_cdma(message, key))
 }
 
 /// Transmits a DS-CDMA signal.
@@ -51,7 +52,25 @@ pub fn rx_cdma_bpsk_signal<'a, I: Iterator<Item = Complex<f64>> + 'a>(
     signal: I,
     key: &'a [Bit],
 ) -> impl Iterator<Item = Bit> + '_ {
-    rx_cdma(signal.map(|s_i| s_i.re > 0f64), key)
+    rx_cdma(rx_bpsk_signal(signal), key)
+}
+
+/// Transmits a DS-CDMA signal.
+/// Each bit of a data signal is multiplied by a key.
+/// The output rate of this function is the bitrate times the keysize.
+pub fn tx_cdma_qpsk_signal<'a, I: Iterator<Item = Bit> + 'a>(
+    message: I,
+    key: &'a [Bit],
+) -> impl Iterator<Item = Complex<f64>> + 'a {
+    tx_qpsk_signal(tx_cdma(message, key))
+}
+
+/// Transmits a DS-CDMA signal.
+pub fn rx_cdma_qpsk_signal<'a, I: Iterator<Item = Complex<f64>> + 'a>(
+    signal: I,
+    key: &'a [Bit],
+) -> impl Iterator<Item = Bit> + '_ {
+    rx_cdma(rx_qpsk_signal(signal), key)
 }
 
 #[cfg(test)]
