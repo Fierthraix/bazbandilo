@@ -91,10 +91,8 @@ macro_rules! ber_plot {
             locals.set_item("axes", axes).unwrap();
             py.eval_bound("fig.set_size_inches(16, 9)", None, Some(&locals))
                 .unwrap();
-            if $log {
-                py.eval_bound("axes.set_yscale('log')", None, Some(&locals))
-                    .unwrap();
-            }
+            py.eval_bound("axes.set_yscale('log')", None, Some(&locals))
+                .unwrap();
             for line in [
                 "axes.plot(x, y)",
                 &format!("fig.savefig('{}')", $name),

@@ -215,19 +215,40 @@ pub fn awgn<I: Iterator<Item = Complex<f64>>>(
                 .unwrap()
                 .sample_iter(rand::thread_rng()),
         )
-        .map(|(sample, noise)| sample + noise)
+        .zip(
+            Normal::new(0f64, sigma)
+                .unwrap()
+                .sample_iter(rand::thread_rng()),
+        )
+        .map(|((sample, n_1), n_2)| sample + Complex::new(n_1, n_2))
+}
+
+#[pyfunction]
+#[pyo3(name = "energy_real", signature = (signal, avg=false))]
+pub fn energy_real(signal: Vec<f64>, avg: bool) -> f64 {
+    let energy: f64 = signal.iter().map(|&sample| sample.abs().powi(2)).sum();
+    if avg {
+        energy / signal.len() as f64
+    } else {
+        energy
+    }
+}
+
+#[pyfunction]
+#[pyo3(name = "energy", signature = (signal, avg=false))]
+pub fn energy_complex(signal: Vec<Complex<f64>>, avg: bool) -> f64 {
+    let energy: f64 = signal.iter().map(|&sample| sample.norm_sqr()).sum();
+    if avg {
+        energy / signal.len() as f64
+    } else {
+        energy
+    }
 }
 
 #[inline]
 /// Calculates the energy per sample.
 pub fn avg_energy(signal: &[Complex<f64>]) -> f64 {
     signal.iter().map(|&sample| sample.norm_sqr()).sum::<f64>() / signal.len() as f64
-}
-
-#[pyfunction]
-#[pyo3(name = "avg_energy")]
-pub fn avg_energy_py(signal: Vec<Complex<f64>>) -> f64 {
-    avg_energy(&signal)
 }
 
 #[cfg(test)]
@@ -345,7 +366,7 @@ fn energy_detector(signal: Vec<Complex<f64>>) -> f64 {
 
 #[pyfunction]
 #[pyo3(name = "awgn_complex")]
-fn awgn_py(signal: Vec<Complex<f64>>, sigma: f64) -> Vec<Complex<f64>> {
+pub fn awgn_py(signal: Vec<Complex<f64>>, sigma: f64) -> Vec<Complex<f64>> {
     signal
         .into_iter()
         .zip(
@@ -531,7 +552,8 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pure_awgn, m)?)?;
     m.add_function(wrap_pyfunction!(chirp, m)?)?;
     m.add_function(wrap_pyfunction!(energy_detector, m)?)?;
-    m.add_function(wrap_pyfunction!(avg_energy_py, m)?)?;
+    m.add_function(wrap_pyfunction!(energy_real, m)?)?;
+    m.add_function(wrap_pyfunction!(energy_complex, m)?)?;
     m.add_function(wrap_pyfunction!(ssca_py, m)?)?;
     m.add_function(wrap_pyfunction!(max_cut_detector, m)?)?;
     m.add_function(wrap_pyfunction!(max_cut_detector_sxf, m)?)?;
