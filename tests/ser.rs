@@ -55,22 +55,17 @@ macro_rules! BitErrorTest {
 
             samples_for_one_bit
         };
-        let (eb, es) = {
+        let eb = {
             let num_bits = 65536;
 
             let data = random_data(num_bits);
             let tx_signal: Vec<Complex<f64>> = $tx_fn(data.iter().cloned()).collect();
-            let energy: f64 = tx_signal.iter().map(|&s_i| s_i.norm_sqr()).sum();
 
+            let energy: f64 = tx_signal.iter().map(|&s_i| s_i.norm_sqr()).sum();
             let num_bits_received: usize =
                 $rx_fn(tx_signal.iter().cloned()).fold(0, |acc, _| acc + 1);
-            let eb = energy / num_bits_received as f64;
-            let num_samples = tx_signal.iter().fold(0, |acc, _| acc + 1);
-            let num_symbols = num_samples as f64 / samples_per_symbol as f64;
 
-            let es = energy * samples_per_symbol as f64 / num_symbols;
-
-            (eb, es)
+            energy / num_bits_received as f64
         };
 
         let n0s = $snrs.par_iter().map(|snr| (eb / (2f64 * snr)).sqrt());
@@ -82,17 +77,22 @@ macro_rules! BitErrorTest {
 
                 while errors < NUM_ERRORS {
                     let num_bits = 9088;
-                    num_total_bits += num_bits;
-                    let data = random_data(num_bits);
-                    // let tx_signal = $tx_fn(data.iter().cloned()).map(|s_i| s_i / es.sqrt());
-                    let tx_signal = $tx_fn(data.iter().cloned());
-                    let rx_signal = $rx_fn(awgn(tx_signal, n0));
 
-                    errors += data
-                        .iter()
-                        .zip(rx_signal)
-                        .map(|(&d_i, r_i)| if d_i == r_i { 0 } else { 1 })
+                    errors += (0..num_cpus::get())
+                        .into_par_iter()
+                        .map(|_| {
+                            let data = random_data(num_bits);
+                            let tx_signal = $tx_fn(data.iter().cloned());
+                            let rx_signal = $rx_fn(awgn(tx_signal, n0));
+
+                            data.iter()
+                                .zip(rx_signal)
+                                .map(|(&d_i, r_i)| if d_i == r_i { 0 } else { 1 })
+                                .sum::<usize>()
+                        })
                         .sum::<usize>();
+
+                    num_total_bits += num_bits;
                 }
 
                 errors as f64 / num_total_bits as f64
