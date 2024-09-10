@@ -1,4 +1,7 @@
+use std::sync::Mutex;
+
 use convert_case::{Case, Casing};
+use kdam::{par_tqdm, BarExt};
 use num_complex::Complex;
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
@@ -31,7 +34,6 @@ fn random_data(num_bits: usize) -> Vec<Bit> {
 struct BitErrorResults {
     name: String,
     bers: Vec<f64>,
-    snrs: Vec<f64>,
 }
 
 const NUM_ERRORS: usize = 10_000;
@@ -39,7 +41,6 @@ const NUM_ERRORS: usize = 10_000;
 
 macro_rules! BitErrorTest {
     ($name:expr, $tx_fn:expr, $rx_fn:expr, $snrs:expr) => {{
-        println!("Started with {}.", $name);
         let eb = {
             let num_bits = 65536;
 
@@ -53,8 +54,12 @@ macro_rules! BitErrorTest {
             energy / num_bits_received as f64
         };
 
-        let n0s = $snrs.par_iter().map(|snr| (eb / (2f64 * snr)).sqrt());
+        let mut pb = par_tqdm!(total = $snrs.len());
+        pb.refresh().unwrap();
+        pb.set_description($name);
+        let pb = Mutex::new(pb);
 
+        let n0s = $snrs.par_iter().map(|snr| (eb / (2f64 * snr)).sqrt());
         let bers: Vec<f64> = n0s
             .map(|n0| {
                 let mut errors = 0;
@@ -80,6 +85,8 @@ macro_rules! BitErrorTest {
                     num_total_bits += parallel * num_bits;
                 }
 
+                let mut pb = pb.lock().unwrap();
+                pb.update(1).unwrap();
                 errors as f64 / num_total_bits as f64
             })
             .collect();
@@ -88,7 +95,6 @@ macro_rules! BitErrorTest {
         BitErrorResults {
             name: String::from($name),
             bers,
-            snrs: $snrs.clone(),
         }
     }};
 }
@@ -97,8 +103,7 @@ macro_rules! BitErrorTest {
 fn main() {
     // let snrs_db: Vec<f64> = linspace(0f64, 10f64, 25).collect();
     let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
-    // let snrs_db: Vec<f64> = linspace(-25f64, 10f64, 50).collect();
-    // let snrs_db: Vec<f64> = linspace(-25f64, 20f64, 75).collect();
+    // let snrs_db: Vec<f64> = linspace(-25f64, 12f64, 50).collect();
 
     let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
 
@@ -178,8 +183,6 @@ fn main() {
         ),
     ];
 
-    // ber_plot!(snr_db, bpsk_bers, "/tmp/bpsk_ber.png");
-
     let bpsk_theory: Vec<f64> = snrs
         .iter()
         .cloned()
@@ -190,8 +193,6 @@ fn main() {
         let matplotlib = py.import_bound("matplotlib").unwrap();
         let plt = py.import_bound("matplotlib.pyplot").unwrap();
         let locals = [("matplotlib", matplotlib), ("plt", plt)].into_py_dict_bound(py);
-        // py.eval_bound("matplotlib.use('agg')", None, Some(&locals))
-        //     .unwrap();
 
         locals.set_item("snrs", &snrs).unwrap();
         locals.set_item("snrs_db", &snrs_db).unwrap();
@@ -220,8 +221,6 @@ fn main() {
         }
         locals.set_item("bpsk_theory", bpsk_theory).unwrap();
 
-        // py.eval_bound("fig.set_size_inches(16, 9)", None, Some(&locals))
-        //     .unwrap();
         for line in [
             "axes.plot(snrs_db, bpsk_theory, label='BPSK Theoretical')",
             "axes.legend(loc='best')",
