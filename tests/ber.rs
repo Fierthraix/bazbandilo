@@ -1,5 +1,7 @@
 use std::sync::Mutex;
 
+use util::ber::{ber_bfsk, ber_bpsk, ber_qam, ber_qpsk};
+
 use convert_case::{Case, Casing};
 use kdam::{par_tqdm, BarExt};
 use num_complex::Complex;
@@ -15,7 +17,6 @@ use bazbandilo::{
     awgn,
     cdma::{rx_cdma_bpsk_signal, rx_cdma_qpsk_signal, tx_cdma_bpsk_signal, tx_cdma_qpsk_signal},
     csk::{rx_baseband_csk_signal, tx_baseband_csk_signal},
-    erfc,
     fh_ofdm_dcsk::{rx_fh_ofdm_dcsk_signal, tx_fh_ofdm_dcsk_signal},
     fsk::{rx_bfsk_signal, tx_bfsk_signal},
     hadamard::HadamardMatrix,
@@ -183,11 +184,12 @@ fn main() {
         ),
     ];
 
-    let bpsk_theory: Vec<f64> = snrs
-        .iter()
-        .cloned()
-        .map(|snr| 0.5 * erfc(snr.sqrt()))
-        .collect();
+    let theory_bers = [
+        ("BPSK", bers!(ber_bpsk, snrs)),
+        ("QPSK", bers!(ber_qpsk, snrs)),
+        ("FSK", bers!(ber_bfsk, snrs)),
+        ("16QAM", bers!(|snr| ber_qam(snr, 16), snrs)),
+    ];
 
     Python::with_gil(|py| {
         let matplotlib = py.import_bound("matplotlib").unwrap();
@@ -219,7 +221,9 @@ fn main() {
             )
             .unwrap();
         }
-        locals.set_item("bpsk_theory", bpsk_theory).unwrap();
+        locals
+            .set_item("bpsk_theory", theory_bers[0].1.clone())
+            .unwrap();
 
         for line in [
             "axes.plot(snrs_db, bpsk_theory, label='BPSK Theoretical')",

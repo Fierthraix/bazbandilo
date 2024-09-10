@@ -2,6 +2,8 @@
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
 
+pub mod ber;
+
 macro_rules! init_matplotlib {
     ($py: expr) => {{
         let matplotlib = $py.import_bound("matplotlib").unwrap();
