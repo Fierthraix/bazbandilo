@@ -1,143 +1,233 @@
-#![allow(unused_variables, non_upper_case_globals)]
-use bazbandilo::{
-    // cdma::{rx_cdma_bpsk_signal, tx_cdma_bpsk_signal},
-    db,
-    erfc,
-    linspace,
-    ofdm::{rx_ofdm_signal, tx_ofdm_signal},
-    psk::{rx_bpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_qpsk_signal},
-    undb,
-    Bit,
-};
+use std::sync::Mutex;
 
-use num::complex::Complex;
+use convert_case::{Case, Casing};
+use kdam::{par_tqdm, BarExt};
+use num_complex::Complex;
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
 use rand::Rng;
-use rand_distr::{Distribution, Normal};
 use rayon::prelude::*;
-use rstest::*;
-
-use util::not_inf;
 
 #[macro_use]
 mod util;
 
-fn ber_bpsk(eb_nos: &[f64]) -> Vec<f64> {
-    eb_nos
-        .iter()
-        .map(|eb_no| 0.5 * erfc(eb_no.sqrt()))
-        .collect()
-}
+use bazbandilo::{
+    awgn,
+    cdma::{rx_cdma_bpsk_signal, rx_cdma_qpsk_signal, tx_cdma_bpsk_signal, tx_cdma_qpsk_signal},
+    csk::{rx_baseband_csk_signal, tx_baseband_csk_signal},
+    erfc,
+    fh_ofdm_dcsk::{rx_fh_ofdm_dcsk_signal, tx_fh_ofdm_dcsk_signal},
+    fsk::{rx_bfsk_signal, tx_bfsk_signal},
+    hadamard::HadamardMatrix,
+    linspace,
+    ofdm::{rx_ofdm_signal, tx_ofdm_signal},
+    psk::{rx_bpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_qpsk_signal},
+    qam::{rx_qam_signal, tx_qam_signal},
+    undb, Bit,
+};
 
-fn ber_qpsk(eb_nos: &[f64]) -> Vec<f64> {
-    eb_nos
-        .iter()
-        .map(|eb_no| 0.5 * erfc(eb_no.sqrt()) - 0.25 * erfc(eb_no.sqrt()).powi(2))
-        .collect()
-}
-
-// const NUM_BITS: usize = 160_000;
-const NUM_BITS: usize = 9002;
-
-fn get_data(num_bits: usize) -> Vec<Bit> {
+fn random_data(num_bits: usize) -> Vec<Bit> {
     let mut rng = rand::thread_rng();
     (0..num_bits).map(|_| rng.gen::<Bit>()).collect()
 }
 
-#[fixture]
-fn data_bits() -> Vec<Bit> {
-    get_data(NUM_BITS)
+struct BitErrorResults {
+    name: String,
+    bers: Vec<f64>,
 }
 
-#[fixture]
-fn snrs() -> Vec<f64> {
-    linspace(-26f64, 6f64, 100).map(undb).collect::<Vec<f64>>()
-}
+const NUM_ERRORS: usize = 10_000;
+// const NUM_ERRORS: usize = 100;
 
-macro_rules! calculate_bers_baseband {
-    ($data:expr, $tx_sig:expr, $rx:expr, $snrs:expr) => {{
-        let bers: Vec<f64> = $snrs
-            .par_iter()
-            .map(|&snr| {
-                let eb: f64 = $tx_sig
-                    .iter()
-                    .cloned()
-                    .map(|s_i| s_i.norm_sqr())
-                    .sum::<f64>()
-                    / $data.len() as f64;
+macro_rules! BitErrorTest {
+    ($name:expr, $tx_fn:expr, $rx_fn:expr, $snrs:expr) => {{
+        let eb = {
+            let num_bits = 65536;
 
-                let n0 = not_inf((eb / (2f64 * snr)).sqrt());
-                let awgn_noise = Normal::new(0f64, n0).unwrap();
+            let data = random_data(num_bits);
+            let tx_signal: Vec<Complex<f64>> = $tx_fn(data.iter().cloned()).collect();
 
-                let noisy_signal = $tx_sig
-                    .iter()
-                    .cloned()
-                    .zip(awgn_noise.sample_iter(rand::thread_rng()))
-                    .map(|(symb, noise)| symb + noise);
+            let energy: f64 = tx_signal.iter().map(|&s_i| s_i.norm_sqr()).sum();
+            let num_bits_received: usize =
+                $rx_fn(tx_signal.iter().cloned()).fold(0, |acc, _| acc + 1);
 
-                $rx(noisy_signal)
-                    .zip($data.iter())
-                    .map(|(rx, &tx)| if rx == tx { 0f64 } else { 1f64 })
-                    .sum::<f64>()
-                    / $data.len() as f64
+            energy / num_bits_received as f64
+        };
+
+        let mut pb = par_tqdm!(total = $snrs.len());
+        pb.refresh().unwrap();
+        pb.set_description($name);
+        let pb = Mutex::new(pb);
+
+        let n0s = $snrs.par_iter().map(|snr| (eb / (2f64 * snr)).sqrt());
+        let bers: Vec<f64> = n0s
+            .map(|n0| {
+                let mut errors = 0;
+                let mut num_total_bits = 0;
+
+                while errors < NUM_ERRORS {
+                    let num_bits = 9088;
+                    let parallel = num_cpus::get();
+                    errors += (0..parallel)
+                        .into_par_iter()
+                        .map(|_| {
+                            let data = random_data(num_bits);
+                            let tx_signal = $tx_fn(data.iter().cloned());
+                            let rx_signal = $rx_fn(awgn(tx_signal, n0));
+
+                            rx_signal
+                                .zip(data.iter())
+                                .map(|(r_i, &d_i)| if d_i == r_i { 0 } else { 1 })
+                                .sum::<usize>()
+                        })
+                        .sum::<usize>();
+
+                    num_total_bits += parallel * num_bits;
+                }
+
+                let mut pb = pb.lock().unwrap();
+                pb.update(1).unwrap();
+                errors as f64 / num_total_bits as f64
             })
             .collect();
-        bers
+
+        println!("Finished with {}.", $name);
+        BitErrorResults {
+            name: String::from($name),
+            bers,
+        }
     }};
 }
 
-#[rstest]
-fn bpsk_works(snrs: Vec<f64>, data_bits: Vec<Bit>) {
-    // Transmit the signal.
-    let bpsk_tx: Vec<Complex<f64>> = tx_bpsk_signal(data_bits.iter().cloned()).collect();
+#[test]
+fn main() {
+    // let snrs_db: Vec<f64> = linspace(0f64, 10f64, 25).collect();
+    let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
+    // let snrs_db: Vec<f64> = linspace(-25f64, 12f64, 50).collect();
 
-    let y = calculate_bers_baseband!(data_bits, bpsk_tx, rx_bpsk_signal, snrs);
-    let y_theory: Vec<f64> = ber_bpsk(&snrs);
-    let snrs_db: Vec<f64> = snrs.iter().cloned().map(db).collect();
+    let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
 
-    // ber_plot!(snrs_db, y, y_theory, "/tmp/ber_bpsk.png");
-    ber_plot!(snrs, y, y_theory, "/tmp/ber_bpsk.png");
+    let h = HadamardMatrix::new(32);
+    let key = h.key(2);
 
-    let bpsk_rx: Vec<Bit> = rx_bpsk_signal(bpsk_tx.iter().cloned()).collect();
-    assert_eq!(data_bits, bpsk_rx);
-}
+    let bers = [
+        // PSK
+        BitErrorTest!("BPSK", tx_bpsk_signal, rx_bpsk_signal, snrs),
+        BitErrorTest!("QPSK", tx_qpsk_signal, rx_qpsk_signal, snrs),
+        // CDMA
+        BitErrorTest!(
+            "CDMA-BPSK",
+            |m| tx_cdma_bpsk_signal(m, key),
+            |s| rx_cdma_bpsk_signal(s, key),
+            snrs
+        ),
+        BitErrorTest!(
+            "CDMA-QPSK",
+            |m| tx_cdma_qpsk_signal(m, key),
+            |s| rx_cdma_qpsk_signal(s, key),
+            snrs
+        ),
+        // QAM
+        BitErrorTest!(
+            "4QAM",
+            |m| tx_qam_signal(m, 4),
+            |s| rx_qam_signal(s, 4),
+            snrs
+        ),
+        BitErrorTest!(
+            "16QAM",
+            |m| tx_qam_signal(m, 16),
+            |s| rx_qam_signal(s, 16),
+            snrs
+        ),
+        BitErrorTest!(
+            "64QAM",
+            |m| tx_qam_signal(m, 64),
+            |s| rx_qam_signal(s, 64),
+            snrs
+        ),
+        BitErrorTest!(
+            "1024QAM",
+            |m| tx_qam_signal(m, 1024),
+            |s| rx_qam_signal(s, 1024),
+            snrs
+        ),
+        // BFSK
+        BitErrorTest!(
+            "BFSK",
+            |m| tx_bfsk_signal(m, 16),
+            |s| rx_bfsk_signal(s, 16),
+            snrs
+        ),
+        // OFDM
+        BitErrorTest!(
+            "OFDM-BPSK",
+            |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 14),
+            |s| rx_bpsk_signal(rx_ofdm_signal(s, 16, 14)),
+            snrs
+        ),
+        BitErrorTest!(
+            "OFDM-QPSK",
+            |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 14),
+            |s| rx_qpsk_signal(rx_ofdm_signal(s, 16, 14)),
+            snrs
+        ),
+        // CSK
+        BitErrorTest!("CSK", tx_baseband_csk_signal, rx_baseband_csk_signal, snrs),
+        // FH-OFDM-DCSK
+        BitErrorTest!(
+            "FH-OFDM-DCSK",
+            tx_fh_ofdm_dcsk_signal,
+            rx_fh_ofdm_dcsk_signal,
+            snrs
+        ),
+    ];
 
-#[rstest]
-fn qpsk_works(snrs: Vec<f64>, data_bits: Vec<Bit>) {
-    // Transmit the signal.
-    let qpsk_tx: Vec<Complex<f64>> = tx_qpsk_signal(data_bits.iter().cloned()).collect();
+    let bpsk_theory: Vec<f64> = snrs
+        .iter()
+        .cloned()
+        .map(|snr| 0.5 * erfc(snr.sqrt()))
+        .collect();
 
-    let y = calculate_bers_baseband!(data_bits, qpsk_tx, rx_qpsk_signal, snrs);
+    Python::with_gil(|py| {
+        let matplotlib = py.import_bound("matplotlib").unwrap();
+        let plt = py.import_bound("matplotlib.pyplot").unwrap();
+        let locals = [("matplotlib", matplotlib), ("plt", plt)].into_py_dict_bound(py);
 
-    let y_theory: Vec<f64> = ber_qpsk(&snrs);
+        locals.set_item("snrs", &snrs).unwrap();
+        locals.set_item("snrs_db", &snrs_db).unwrap();
 
-    ber_plot!(snrs, y, y_theory, "/tmp/ber_qpsk.png");
+        let (fig, axes): (&PyAny, &PyAny) = py
+            .eval_bound("plt.subplots(1)", None, Some(&locals))
+            .unwrap()
+            .extract()
+            .unwrap();
+        locals.set_item("fig", fig).unwrap();
+        locals.set_item("axes", axes).unwrap();
 
-    let qpsk_rx: Vec<Bit> = rx_qpsk_signal(qpsk_tx.iter().cloned()).collect();
-    assert_eq!(data_bits, qpsk_rx);
-}
+        // Plot the BER.
+        for ber_result in bers {
+            let py_name = format!("bers_{}", ber_result.name).to_case(Case::Snake);
+            locals.set_item(&py_name, &ber_result.bers).unwrap();
+            py.eval_bound(
+                &format!(
+                    "axes.plot(snrs_db, {}, label='{}')",
+                    py_name, ber_result.name
+                ),
+                None,
+                Some(&locals),
+            )
+            .unwrap();
+        }
+        locals.set_item("bpsk_theory", bpsk_theory).unwrap();
 
-#[rstest]
-fn ofdm_works(snrs: Vec<f64>, data_bits: Vec<Bit>) {
-    let subcarriers = 64;
-    let pilots = 12;
-    let tx_sig: Vec<Complex<f64>> = tx_ofdm_signal(
-        tx_bpsk_signal(data_bits.iter().cloned()),
-        subcarriers,
-        pilots,
-    )
-    .collect();
-
-    fn rx<I: Iterator<Item = Complex<f64>>>(signal: I) -> impl Iterator<Item = Bit> {
-        let subcarriers = 64;
-        let pilots = 12;
-        rx_bpsk_signal(rx_ofdm_signal(signal, subcarriers, pilots))
-    }
-
-    let y = calculate_bers_baseband!(data_bits, tx_sig, rx, snrs);
-
-    let y_theory: Vec<f64> = ber_bpsk(&snrs);
-
-    ber_plot!(snrs, y, y_theory, "/tmp/ber_ofdm.png");
+        for line in [
+            "axes.plot(snrs_db, bpsk_theory, label='BPSK Theoretical')",
+            "axes.legend(loc='best')",
+            "axes.set_yscale('log')",
+            "plt.show()",
+        ] {
+            py.eval_bound(line, None, Some(&locals)).unwrap();
+        }
+    })
 }

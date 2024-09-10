@@ -30,13 +30,13 @@ use crate::cdma::{
     rx_cdma_bpsk_signal, rx_cdma_qpsk_signal, tx_cdma_bpsk_signal, tx_cdma_qpsk_signal,
 };
 use crate::fh_css::{linear_chirp, tx_fh_css_signal};
-use crate::psk::{rx_bpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_qpsk_signal};
-use crate::qam::{rx_qam_signal, tx_qam_signal};
-// use crate::fh_ofdm_dcsk::tx_fh_ofdm_dcsk_signal;
+use crate::fh_ofdm_dcsk::{rx_fh_ofdm_dcsk_signal, tx_fh_ofdm_dcsk_signal};
 use crate::fsk::{rx_bfsk_signal, tx_bfsk_signal};
 use crate::hadamard::HadamardMatrix;
 use crate::iter::Iter;
 use crate::ofdm::{rx_ofdm_signal, tx_ofdm_signal};
+use crate::psk::{rx_bpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_qpsk_signal};
+use crate::qam::{rx_qam_signal, tx_qam_signal};
 use crate::ssca::{ssca_base, ssca_mapped};
 
 pub type Bit = bool;
@@ -529,6 +529,16 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
             num_freqs,
         )
         .collect()
+    }
+
+    #[pyfunction]
+    fn tx_fh_ofdm_dcsk(data: Vec<Bit>) -> Vec<Complex<f64>> {
+        tx_fh_ofdm_dcsk_signal(data.into_iter()).collect()
+    }
+
+    #[pyfunction]
+    fn rx_fh_ofdm_dcsk(signal: Vec<Complex<f64>>) -> Vec<Bit> {
+        rx_fh_ofdm_dcsk_signal(signal.into_iter()).collect()
     }
 
     m.add_function(wrap_pyfunction!(tx_bpsk, m)?)?;

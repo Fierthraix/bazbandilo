@@ -3,6 +3,7 @@ default: make
 alias c := clean
 alias f := flamegraph
 alias i := interactive
+alias j := jupyter
 alias m := make
 alias p := plop
 alias pv := plop_view
@@ -25,6 +26,9 @@ install:
 	poetry install
 	cargo install maturin
 	@just make
+
+jupyter:
+	poetry run jupyter lab
 
 plop arg:
 	poetry run python3 -m plop.collector {{ arg }}

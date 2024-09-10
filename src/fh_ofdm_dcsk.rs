@@ -116,13 +116,10 @@ mod tests {
     use crate::fh_ofdm_dcsk::tests::rand::Rng;
 
     #[test]
-    #[ignore] // TODO: FIXME: this test.
+    // #[ignore] // TODO: FIXME: this test.
     fn baseband() {
         let mut rng = rand::thread_rng();
-        // let num_bits = 9002;
-        // let num_bits = 98;
-        // let num_bits = 7;
-        let num_bits = 14;
+        let num_bits = 9002;
         let data_bits: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
 
         let fh_ofdm_dcsk_tx: Vec<Complex<f64>> =
