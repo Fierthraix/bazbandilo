@@ -11,7 +11,9 @@ mod util;
 use bazbandilo::{
     awgn,
     cdma::{rx_cdma_bpsk_signal, rx_cdma_qpsk_signal, tx_cdma_bpsk_signal, tx_cdma_qpsk_signal},
+    csk::{rx_baseband_csk_signal, tx_baseband_csk_signal},
     erfc,
+    fh_ofdm_dcsk::{rx_fh_ofdm_dcsk_signal, tx_fh_ofdm_dcsk_signal},
     fsk::{rx_bfsk_signal, tx_bfsk_signal},
     hadamard::HadamardMatrix,
     linspace,
@@ -38,23 +40,6 @@ const NUM_ERRORS: usize = 10_000;
 macro_rules! BitErrorTest {
     ($name:expr, $tx_fn:expr, $rx_fn:expr, $snrs:expr) => {{
         println!("Started with {}.", $name);
-        let samples_per_symbol = {
-            // Check how many samples are emitted for one bit sent.
-            let mut bits = vec![true];
-            let samples_for_one_bit: usize = $tx_fn(bits.iter().cloned()).fold(0, |acc, _| acc + 1);
-
-            // Add another bit until the amount of samples emitted increments.
-            bits.push(true);
-            loop {
-                let num_samples: usize = $tx_fn(bits.iter().cloned()).fold(0, |acc, _| acc + 1);
-                if num_samples > samples_for_one_bit {
-                    break; // Sample amount increased: new symbol was generated.
-                }
-                bits.push(true);
-            }
-
-            samples_for_one_bit
-        };
         let eb = {
             let num_bits = 65536;
 
@@ -77,22 +62,22 @@ macro_rules! BitErrorTest {
 
                 while errors < NUM_ERRORS {
                     let num_bits = 9088;
-
-                    errors += (0..num_cpus::get())
+                    let parallel = num_cpus::get();
+                    errors += (0..parallel)
                         .into_par_iter()
                         .map(|_| {
                             let data = random_data(num_bits);
                             let tx_signal = $tx_fn(data.iter().cloned());
                             let rx_signal = $rx_fn(awgn(tx_signal, n0));
 
-                            data.iter()
-                                .zip(rx_signal)
-                                .map(|(&d_i, r_i)| if d_i == r_i { 0 } else { 1 })
+                            rx_signal
+                                .zip(data.iter())
+                                .map(|(r_i, &d_i)| if d_i == r_i { 0 } else { 1 })
                                 .sum::<usize>()
                         })
                         .sum::<usize>();
 
-                    num_total_bits += num_bits;
+                    num_total_bits += parallel * num_bits;
                 }
 
                 errors as f64 / num_total_bits as f64
@@ -111,8 +96,9 @@ macro_rules! BitErrorTest {
 #[test]
 fn main() {
     // let snrs_db: Vec<f64> = linspace(0f64, 10f64, 25).collect();
-    // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
-    let snrs_db: Vec<f64> = linspace(-25f64, 10f64, 50).collect();
+    let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
+    // let snrs_db: Vec<f64> = linspace(-25f64, 10f64, 50).collect();
+    // let snrs_db: Vec<f64> = linspace(-25f64, 20f64, 75).collect();
 
     let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
 
@@ -122,7 +108,7 @@ fn main() {
     let bers = [
         // PSK
         BitErrorTest!("BPSK", tx_bpsk_signal, rx_bpsk_signal, snrs),
-        // BitErrorTest!("QPSK", tx_qpsk_signal, rx_qpsk_signal, snrs),
+        BitErrorTest!("QPSK", tx_qpsk_signal, rx_qpsk_signal, snrs),
         // CDMA
         BitErrorTest!(
             "CDMA-BPSK",
@@ -179,6 +165,15 @@ fn main() {
             "OFDM-QPSK",
             |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 14),
             |s| rx_qpsk_signal(rx_ofdm_signal(s, 16, 14)),
+            snrs
+        ),
+        // CSK
+        BitErrorTest!("CSK", tx_baseband_csk_signal, rx_baseband_csk_signal, snrs),
+        // FH-OFDM-DCSK
+        BitErrorTest!(
+            "FH-OFDM-DCSK",
+            tx_fh_ofdm_dcsk_signal,
+            rx_fh_ofdm_dcsk_signal,
             snrs
         ),
     ];
