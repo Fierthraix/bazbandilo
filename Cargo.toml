@@ -36,6 +36,9 @@ extension-module = ["pyo3/extension-module"]
 [dev-dependencies]
 average = "0.15.1"
 csv = "1.3"
+convert_case = "0.6"
+kdam = {version = "0.5", features = ["rayon"]}
+num_cpus = "1.0"
 rayon = "1.10"
 rstest = "0.21"
 welch-sde = "0.1"

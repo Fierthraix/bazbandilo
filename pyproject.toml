@@ -17,6 +17,7 @@ tqdm = "^4.66.4"
 [tool.poetry.group.dev.dependencies]
 maturin = "^1.5.1"
 plop = "^0.4.0"
+jupyter = "^1.1.0"
 
 [tool.maturin]
 profile = "release"

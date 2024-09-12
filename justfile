@@ -1,5 +1,6 @@
 default: make
 
+alias b := ber
 alias c := clean
 alias f := flamegraph
 alias i := interactive
@@ -12,6 +13,9 @@ alias t := test
 
 test_dir := justfile_directory() + "/tests/"
 ffi_dir := justfile_directory() + "/komrs"
+
+ber:
+	cargo test --test ber -- --nocapture
 
 clean:
 	-rm "{{ ffi_dir }}"/*.so

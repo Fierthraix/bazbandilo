@@ -37,7 +37,6 @@ pub fn ssca_base(s: &[Complex<f64>], n: usize, np: usize) -> Array2<Complex<f64>
             // Step 2.
             fft_np.process_with_scratch(xa.as_slice_mut().unwrap(), &mut scratch_np);
             let xat = Array1::from(fftshift(xa.as_slice().unwrap()));
-            // let xat = Array1::from(xa);
 
             // Step 3.
             let em = Array1::from_iter((0..np).map(|j| {
@@ -60,7 +59,6 @@ pub fn ssca_base(s: &[Complex<f64>], n: usize, np: usize) -> Array2<Complex<f64>
             let mut xgi = Vec::from_iter(xgi.iter().cloned());
             fft_n.process_with_scratch(&mut xgi, &mut scratch_n);
             sx.push_row(ArrayView1::from(&fftshift(&xgi))).unwrap();
-            // sx.push_row(ArrayView1::from(&xgi)).unwrap();
         }
         sx.reversed_axes()
     };
@@ -68,7 +66,7 @@ pub fn ssca_base(s: &[Complex<f64>], n: usize, np: usize) -> Array2<Complex<f64>
 }
 
 #[inline]
-fn ssca_mapper(sx: Array2<Complex<f64>>) -> Array2<Complex<f64>> {
+fn ssca_mapper(sx: &Array2<Complex<f64>>) -> Array2<Complex<f64>> {
     let (n, np) = sx.dim();
     let mut sxf: Array2<Complex<f64>> = Array2::zeros((np + 1, 2 * n + 1));
     // Step 5.
@@ -86,5 +84,5 @@ fn ssca_mapper(sx: Array2<Complex<f64>>) -> Array2<Complex<f64>> {
 
 pub fn ssca_mapped(s: &[Complex<f64>], n: usize, np: usize) -> Array2<Complex<f64>> {
     let sx = ssca_base(s, n, np);
-    ssca_mapper(sx)
+    ssca_mapper(&sx)
 }
