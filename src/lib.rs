@@ -177,21 +177,12 @@ pub fn erfc(x: f64) -> f64 {
     1f64 - erf(x)
 }
 
-pub fn hamming_window(length: usize) -> Vec<f64> {
-    (0..length)
-        .map(|i| 0.54 - 0.46 * (2f64 * PI * i as f64 / length as f64).cos())
-        .collect()
+pub fn hamming_window(length: usize) -> impl Iterator<Item = f64> {
+    (0..length).map(move |i| 0.54 - 0.46 * (2f64 * PI * i as f64 / length as f64).cos())
 }
 
-pub fn hamming_window_complex(length: usize) -> Vec<Complex<f64>> {
-    (0..length)
-        .map(|i| {
-            Complex::new(
-                0.54 - 0.46 * (2f64 * PI * i as f64 / length as f64).cos(),
-                0f64,
-            )
-        })
-        .collect()
+pub fn hamming_window_complex(length: usize) -> impl Iterator<Item = Complex<f64>> {
+    hamming_window(length).map(|h_i| Complex::new(h_i, 0f64))
 }
 
 #[inline]

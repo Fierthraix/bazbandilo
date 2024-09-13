@@ -1,4 +1,4 @@
-use crate::{fftshift, hamming_window, hamming_window_complex};
+use crate::{fftshift, hamming_window_complex};
 use std::f64::consts::PI;
 
 use ndrustfft::Zero;
@@ -16,14 +16,12 @@ pub fn ssca_base(s: &[Complex<f64>], n: usize, np: usize) -> Array2<Complex<f64>
     let mut scratch_np = vec![Complex::zero(); fft_np.get_inplace_scratch_len()];
 
     // Hamming Windows.
-    let a = Array1::from_vec(hamming_window_complex(np));
+    let a = Array1::from_iter(hamming_window_complex(np));
     let g_m: Array2<Complex<f64>> = {
         let mut g = Array2::zeros((0, n));
         for _ in 0..np {
-            g.push_row(ArrayView1::from(&Vec::from_iter(
-                hamming_window(n).into_iter().map(|i| Complex::new(i, 0f64)),
-            )))
-            .unwrap();
+            g.push_row(ArrayView1::from(&Vec::from_iter(hamming_window_complex(n))))
+                .unwrap();
         }
         g.reversed_axes()
     };
