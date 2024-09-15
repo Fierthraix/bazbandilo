@@ -18,7 +18,6 @@ pub fn tx_qam_signal<I: Iterator<Item = Bit>>(
     let bits_per_symbol = (m as f64).log2() as usize;
 
     message.chunks(bits_per_symbol).map(move |chunk| {
-        // message.chunks(m).map(move |chunk| {
         let idx = chunk.iter().fold(0, |acc, &bit| (acc << 1) | bit as usize);
         symbols[idx]
     })
@@ -31,20 +30,29 @@ pub fn rx_qam_signal<I: Iterator<Item = Complex<f64>>>(
     let symbols = get_qam_symbols(m);
     let bits_per_symbol = (m as f64).log2() as usize;
 
+    // This is half the separation between adjacent symbols.
+    let min_distance = (symbols[0] - symbols[1]).norm() / 2f64;
+
     signal.flat_map(move |received_symbol| {
         // Find out which symbol was transmitted
         let idx = {
-            let mut min_distance = f64::MAX;
+            let mut smallest_distance = f64::MAX;
             let mut best_index = 0;
 
             // Find the minumum euclidian distance between the symbols.
-            symbols.iter().enumerate().for_each(|(index, &symbol)| {
-                let distance = (received_symbol - symbol).norm_sqr();
+            for (index, &symbol) in symbols.iter().enumerate() {
+                let distance = (received_symbol - symbol).norm();
+
                 if distance < min_distance {
-                    min_distance = distance;
+                    // Symbol cannot possibly be closer to any other symbol,
+                    // so we short-circuit here.
+                    best_index = index;
+                    break;
+                } else if distance < smallest_distance {
+                    smallest_distance = distance;
                     best_index = index;
                 }
-            });
+            }
             best_index
         };
 
