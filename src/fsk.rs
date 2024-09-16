@@ -1,4 +1,4 @@
-use crate::{iter::Iter, linspace, Bit};
+use crate::{angle_diff, iter::Iter, linspace, Bit};
 use std::f64::consts::PI;
 
 use num::Zero;
@@ -23,9 +23,9 @@ pub fn tx_bfsk_signal<I: Iterator<Item = Bit>>(
 
     message.flat_map(move |bit| {
         if bit {
-            degs_p.clone().into_iter().map(mm)
-        } else {
             degs_n.clone().into_iter().map(mm)
+        } else {
+            degs_p.clone().into_iter().map(mm)
         }
     })
 }
@@ -34,38 +34,35 @@ pub fn rx_bfsk_signal<I: Iterator<Item = Complex<f64>>>(
     signal: I,
     samples_per_symbol: usize,
 ) -> impl Iterator<Item = Bit> {
-    signal
-        .chunks(samples_per_symbol)
-        .map(|symbol: Vec<Complex<f64>>| {
-            let angles: Vec<f64> = symbol.iter().map(|&x| x.arg()).collect();
-
-            let angle_changes = angles
-                .iter()
-                .zip(angles[1..].iter())
-                .map(|(&w1, &w2)| w2 - w1);
-
-            angle_changes.sum::<f64>().is_sign_positive()
-        })
+    signal.chunks(samples_per_symbol).map(|symbol| {
+        symbol
+            .iter()
+            .zip(symbol[1..].iter())
+            .map(|(&w1, &w2)| angle_diff(w1, w2))
+            .sum::<f64>()
+            .is_sign_positive()
+    })
 }
 
 pub fn tx_mfsk_signal<I: Iterator<Item = Bit>>(
     message: I,
-    _samples_per_symbol: usize,
+    samples_per_symbol: usize,
 ) -> impl Iterator<Item = Complex<f64>> {
+    let _ = samples_per_symbol;
     message.map(|_| Complex::zero())
 }
 
 pub fn rx_mfsk_signal<I: Iterator<Item = Complex<f64>>>(
     signal: I,
-    _samples_per_symbol: usize,
+    samples_per_symbol: usize,
 ) -> impl Iterator<Item = Bit> {
+    let _ = samples_per_symbol;
     signal.map(|_| true)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    extern crate itertools;
     extern crate rand;
     extern crate rand_distr;
     use crate::Rng;

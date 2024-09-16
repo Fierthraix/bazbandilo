@@ -12,9 +12,9 @@ mod bch;
 pub mod cdma;
 pub mod chaos;
 pub mod csk;
+pub mod css;
 pub mod dcsk;
 pub mod fh;
-pub mod fh_css;
 pub mod fh_ofdm_dcsk;
 mod filters;
 pub mod fsk;
@@ -26,20 +26,36 @@ pub mod qam;
 pub mod ssca;
 mod util;
 
-use crate::cdma::{
-    rx_cdma_bpsk_signal, rx_cdma_qpsk_signal, tx_cdma_bpsk_signal, tx_cdma_qpsk_signal,
+use crate::{
+    cdma::{rx_cdma_bpsk_signal, rx_cdma_qpsk_signal, tx_cdma_bpsk_signal, tx_cdma_qpsk_signal},
+    csk::{rx_csk_signal, tx_csk_signal},
+    // css::tx_css_signal,
+    dcsk::{rx_dcsk_signal, tx_dcsk_signal},
+    fh_ofdm_dcsk::{rx_fh_ofdm_dcsk_signal, tx_fh_ofdm_dcsk_signal},
+    fsk::{rx_bfsk_signal, tx_bfsk_signal},
+    hadamard::HadamardMatrix,
+    iter::Iter,
+    ofdm::{rx_ofdm_signal, tx_ofdm_signal},
+    psk::{rx_bpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_qpsk_signal},
+    qam::{rx_qam_signal, tx_qam_signal},
+    ssca::{ssca_base, ssca_mapped},
 };
-use crate::fh_css::{linear_chirp, tx_fh_css_signal};
-use crate::fh_ofdm_dcsk::{rx_fh_ofdm_dcsk_signal, tx_fh_ofdm_dcsk_signal};
-use crate::fsk::{rx_bfsk_signal, tx_bfsk_signal};
-use crate::hadamard::HadamardMatrix;
-use crate::iter::Iter;
-use crate::ofdm::{rx_ofdm_signal, tx_ofdm_signal};
-use crate::psk::{rx_bpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_qpsk_signal};
-use crate::qam::{rx_qam_signal, tx_qam_signal};
-use crate::ssca::{ssca_base, ssca_mapped};
 
 pub type Bit = bool;
+
+#[inline]
+fn angle_diff(a: Complex<f64>, b: Complex<f64>) -> f64 {
+    // Check the diff from point a to point b.
+    let diff: f64 = b.arg() - a.arg();
+
+    if diff > PI {
+        diff - 2f64 * PI
+    } else if diff < -PI {
+        diff + 2f64 * PI
+    } else {
+        diff
+    }
+}
 
 fn bool_to_u8(bools: &[bool]) -> u8 {
     let mut out: u8 = 0x0;
@@ -356,7 +372,7 @@ fn energy_detector(signal: Vec<Complex<f64>>) -> f64 {
 }
 
 #[pyfunction]
-#[pyo3(name = "awgn_complex")]
+#[pyo3(name = "awgn")]
 pub fn awgn_py(signal: Vec<Complex<f64>>, sigma: f64) -> Vec<Complex<f64>> {
     signal
         .into_iter()
@@ -407,11 +423,6 @@ fn pure_awgn(size: usize, sigma: f64) -> Vec<Complex<f64>> {
         .collect()
 }
 
-#[pyfunction]
-fn chirp(chirp_rate: f64, sample_rate: usize, f0: f64, f1: f64) -> Vec<f64> {
-    linear_chirp(chirp_rate, sample_rate, f0, f1).collect()
-}
-
 #[pymodule]
 #[pyo3(name = "bazbandilo")]
 fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -434,7 +445,6 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
             tx_qpsk_signal(message.into_iter()).collect()
         }
     }
-
     #[pyfunction]
     fn rx_qpsk(signal: Vec<Complex<f64>>) -> Vec<Bit> {
         rx_qpsk_signal(signal.into_iter()).collect()
@@ -444,7 +454,6 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     fn tx_ofdm_qpsk(message: Vec<Bit>, subcarriers: usize, pilots: usize) -> Vec<Complex<f64>> {
         tx_ofdm_signal(tx_qpsk_signal(message.into_iter()), subcarriers, pilots).collect()
     }
-
     #[pyfunction]
     fn rx_ofdm_qpsk(signal: Vec<Complex<f64>>, subcarriers: usize, pilots: usize) -> Vec<Bit> {
         rx_qpsk_signal(rx_ofdm_signal(signal.into_iter(), subcarriers, pilots)).collect()
@@ -457,7 +466,6 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
         let key: Vec<Bit> = walsh_codes.key(0).clone();
         tx_cdma_bpsk_signal(message.into_iter(), &key).collect()
     }
-
     #[pyfunction]
     #[pyo3(signature=(signal, key_len=16))]
     fn rx_cdma_bpsk(signal: Vec<Complex<f64>>, key_len: usize) -> Vec<Bit> {
@@ -473,7 +481,6 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
         let key: Vec<Bit> = walsh_codes.key(0).clone();
         tx_cdma_qpsk_signal(message.into_iter(), &key).collect()
     }
-
     #[pyfunction]
     #[pyo3(signature=(signal, key_len=16))]
     fn rx_cdma_qpsk(signal: Vec<Complex<f64>>, key_len: usize) -> Vec<Bit> {
@@ -486,7 +493,6 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     fn tx_bfsk(data: Vec<Bit>, delta_f: usize) -> Vec<Complex<f64>> {
         tx_bfsk_signal(data.into_iter(), delta_f).collect()
     }
-
     #[pyfunction]
     fn rx_bfsk(signal: Vec<Complex<f64>>, delta_f: usize) -> Vec<Bit> {
         rx_bfsk_signal(signal.into_iter(), delta_f).collect()
@@ -496,37 +502,33 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     fn tx_qam(data: Vec<Bit>, m: usize) -> Vec<Complex<f64>> {
         tx_qam_signal(data.into_iter(), m).collect()
     }
-
     #[pyfunction]
     fn rx_qam(signal: Vec<Complex<f64>>, m: usize) -> Vec<Bit> {
         rx_qam_signal(signal.into_iter(), m).collect()
     }
 
     #[pyfunction]
-    fn tx_fh_css(
-        message: Vec<Bit>,
-        sample_rate: usize,
-        symbol_rate: usize,
-        freq_low: f64,
-        freq_high: f64,
-        num_freqs: usize,
-    ) -> Vec<f64> {
-        tx_fh_css_signal(
-            message.into_iter(),
-            sample_rate,
-            symbol_rate,
-            freq_low,
-            freq_high,
-            num_freqs,
-        )
-        .collect()
+    fn tx_csk(data: Vec<Bit>) -> Vec<Complex<f64>> {
+        tx_csk_signal(data.into_iter()).collect()
+    }
+    #[pyfunction]
+    fn rx_csk(signal: Vec<Complex<f64>>) -> Vec<Bit> {
+        rx_csk_signal(signal.into_iter()).collect()
+    }
+
+    #[pyfunction]
+    fn tx_dcsk(data: Vec<Bit>) -> Vec<Complex<f64>> {
+        tx_dcsk_signal(data.into_iter()).collect()
+    }
+    #[pyfunction]
+    fn rx_dcsk(signal: Vec<Complex<f64>>) -> Vec<Bit> {
+        rx_dcsk_signal(signal.into_iter()).collect()
     }
 
     #[pyfunction]
     fn tx_fh_ofdm_dcsk(data: Vec<Bit>) -> Vec<Complex<f64>> {
         tx_fh_ofdm_dcsk_signal(data.into_iter()).collect()
     }
-
     #[pyfunction]
     fn rx_fh_ofdm_dcsk(signal: Vec<Complex<f64>>) -> Vec<Bit> {
         rx_fh_ofdm_dcsk_signal(signal.into_iter()).collect()
@@ -546,12 +548,16 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rx_bfsk, m)?)?;
     m.add_function(wrap_pyfunction!(tx_qam, m)?)?;
     m.add_function(wrap_pyfunction!(rx_qam, m)?)?;
-    m.add_function(wrap_pyfunction!(tx_fh_css, m)?)?;
+    m.add_function(wrap_pyfunction!(tx_csk, m)?)?;
+    m.add_function(wrap_pyfunction!(rx_csk, m)?)?;
+    m.add_function(wrap_pyfunction!(tx_dcsk, m)?)?;
+    m.add_function(wrap_pyfunction!(rx_dcsk, m)?)?;
+    m.add_function(wrap_pyfunction!(tx_fh_ofdm_dcsk, m)?)?;
+    m.add_function(wrap_pyfunction!(rx_fh_ofdm_dcsk, m)?)?;
     m.add_function(wrap_pyfunction!(random_data, m)?)?;
     m.add_function(wrap_pyfunction!(awgn_py, m)?)?;
     m.add_function(wrap_pyfunction!(awgn2, m)?)?;
     m.add_function(wrap_pyfunction!(pure_awgn, m)?)?;
-    m.add_function(wrap_pyfunction!(chirp, m)?)?;
     m.add_function(wrap_pyfunction!(energy_detector, m)?)?;
     m.add_function(wrap_pyfunction!(energy_real, m)?)?;
     m.add_function(wrap_pyfunction!(energy_complex, m)?)?;
