@@ -20,9 +20,9 @@ pub fn tx_css_signal<I: Iterator<Item = Bit>>(
 
             for delta in delta_thetas.iter() {
                 if bit {
-                    theta -= delta;
-                } else {
                     theta += delta;
+                } else {
+                    theta -= delta;
                 }
                 out.push(theta);
             }
@@ -38,12 +38,19 @@ pub fn rx_css_signal<I: Iterator<Item = Complex<f64>>>(
     assert!(samples_per_symbol >= 8);
 
     message.chunks(samples_per_symbol).map(|symbol| {
-        symbol
+        let angular_velocities: Vec<f64> = symbol
             .iter()
             .zip(symbol[1..].iter())
             .map(|(&w1, &w2)| angle_diff(w1, w2))
-            .sum::<f64>()
-            .is_sign_positive()
+            .collect();
+
+        let angular_accelerations = angular_velocities
+            .iter()
+            .zip(angular_velocities[1..].iter())
+            .map(|(&v1, &v2)| v2 - v1);
+
+        // Check average angular velocity.
+        angular_accelerations.sum::<f64>().is_sign_positive()
     })
 }
 
