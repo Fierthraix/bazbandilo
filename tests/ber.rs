@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::sync::Mutex;
 
 use util::ber::{ber_bfsk, ber_bpsk, ber_qam, ber_qpsk};
@@ -9,6 +11,7 @@ use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
 use rand::Rng;
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 
 #[macro_use]
 mod util;
@@ -16,7 +19,8 @@ mod util;
 use bazbandilo::{
     awgn,
     cdma::{rx_cdma_bpsk_signal, rx_cdma_qpsk_signal, tx_cdma_bpsk_signal, tx_cdma_qpsk_signal},
-    csk::{rx_baseband_csk_signal, tx_baseband_csk_signal},
+    csk::{rx_csk_signal, tx_csk_signal},
+    css::{rx_css_signal, tx_css_signal},
     fh_ofdm_dcsk::{rx_fh_ofdm_dcsk_signal, tx_fh_ofdm_dcsk_signal},
     fsk::{rx_bfsk_signal, tx_bfsk_signal},
     hadamard::HadamardMatrix,
@@ -32,79 +36,112 @@ fn random_data(num_bits: usize) -> Vec<Bit> {
     (0..num_bits).map(|_| rng.gen::<Bit>()).collect()
 }
 
+#[derive(Serialize, Deserialize, Debug)]
 struct BitErrorResults {
     name: String,
     bers: Vec<f64>,
+    snrs: Vec<f64>,
+}
+
+struct BitErrorTest<'a> {
+    name: String,
+    snrs: Vec<f64>,
+    calc_ber_fn: &'a dyn Fn(&[f64]) -> Vec<f64>,
+}
+
+impl<'a> BitErrorTest<'a> {
+    fn calc_bers(self) -> BitErrorResults {
+        let bers: Vec<f64> = (self.calc_ber_fn)(&self.snrs);
+        let snrs = self.snrs[..bers.len()].to_vec();
+        BitErrorResults {
+            name: self.name,
+            bers,
+            snrs,
+        }
+    }
 }
 
 const NUM_ERRORS: usize = 10_000;
 // const NUM_ERRORS: usize = 100;
+const BER_CUTOFF: f64 = 10e-4;
 
 macro_rules! BitErrorTest {
     ($name:expr, $tx_fn:expr, $rx_fn:expr, $snrs:expr) => {{
-        let eb = {
-            let num_bits = 65536;
+        BitErrorTest {
+            name: String::from($name),
+            snrs: $snrs.clone(),
+            calc_ber_fn: &|snrs: &[f64]| {
+                let eb = {
+                    let num_bits = 65536;
 
-            let data = random_data(num_bits);
-            let tx_signal: Vec<Complex<f64>> = $tx_fn(data.iter().cloned()).collect();
+                    let data = random_data(num_bits);
+                    let tx_signal: Vec<Complex<f64>> = $tx_fn(data.iter().cloned()).collect();
 
-            let energy: f64 = tx_signal.iter().map(|&s_i| s_i.norm_sqr()).sum();
-            let num_bits_received: usize =
-                $rx_fn(tx_signal.iter().cloned()).fold(0, |acc, _| acc + 1);
+                    let energy: f64 = tx_signal.iter().map(|&s_i| s_i.norm_sqr()).sum();
+                    let num_bits_received: usize =
+                        $rx_fn(tx_signal.iter().cloned()).fold(0, |acc, _| acc + 1);
 
-            energy / num_bits_received as f64
-        };
+                    energy / num_bits_received as f64
+                };
 
-        let mut pb = par_tqdm!(total = $snrs.len());
-        pb.refresh().unwrap();
-        pb.set_description($name);
-        let pb = Mutex::new(pb);
+                let mut pb = par_tqdm!(total = $snrs.len());
+                pb.refresh().unwrap();
+                pb.set_description($name);
+                let pb = Mutex::new(pb);
 
-        let n0s = $snrs.par_iter().map(|snr| (eb / (2f64 * snr)).sqrt());
-        let bers: Vec<f64> = n0s
-            .map(|n0| {
-                let mut errors = 0;
-                let mut num_total_bits = 0;
+                let mut bers: Vec<f64> = Vec::with_capacity(snrs.len());
+                let n0s = snrs.iter().map(|snr| (eb / (2f64 * snr)).sqrt());
 
-                while errors < NUM_ERRORS {
-                    let num_bits = 9088;
-                    let parallel = num_cpus::get();
-                    errors += (0..parallel)
-                        .into_par_iter()
-                        .map(|_| {
-                            let data = random_data(num_bits);
-                            let tx_signal = $tx_fn(data.iter().cloned());
-                            let rx_signal = $rx_fn(awgn(tx_signal, n0));
+                for n0 in n0s {
+                    let mut errors = 0;
+                    let mut num_total_bits = 0;
+                    let mut curr_ber = 0.5;
 
-                            rx_signal
-                                .zip(data.iter())
-                                .map(|(r_i, &d_i)| if d_i == r_i { 0 } else { 1 })
-                                .sum::<usize>()
-                        })
-                        .sum::<usize>();
+                    while errors < NUM_ERRORS && curr_ber >= BER_CUTOFF {
+                        let num_bits = 9088;
+                        let parallel = num_cpus::get();
+                        errors += (0..parallel)
+                            .into_par_iter()
+                            .map(|_| {
+                                let data = random_data(num_bits);
+                                let tx_signal = $tx_fn(data.iter().cloned());
+                                let rx_signal = $rx_fn(awgn(tx_signal, n0));
 
-                    num_total_bits += parallel * num_bits;
+                                rx_signal
+                                    .zip(data.iter())
+                                    .map(|(r_i, &d_i)| if d_i == r_i { 0 } else { 1 })
+                                    .sum::<usize>()
+                            })
+                            .sum::<usize>();
+
+                        num_total_bits += parallel * num_bits;
+                        curr_ber = errors as f64 / num_total_bits as f64;
+                    }
+
+                    let mut pb = pb.lock().unwrap();
+                    pb.update(1).unwrap();
+                    bers.push(curr_ber);
+                    if curr_ber <= BER_CUTOFF {
+                        break;
+                    }
                 }
 
-                let mut pb = pb.lock().unwrap();
-                pb.update(1).unwrap();
-                errors as f64 / num_total_bits as f64
-            })
-            .collect();
+                println!("Finished with {}.", $name);
 
-        println!("Finished with {}.", $name);
-        BitErrorResults {
-            name: String::from($name),
-            bers,
+                bers
+            },
         }
     }};
 }
 
 #[test]
 fn main() {
-    // let snrs_db: Vec<f64> = linspace(0f64, 10f64, 25).collect();
-    let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
+    // let snrs_db: Vec<f64> = linspace(-25f64, 10f64, 35).collect();
+    // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
     // let snrs_db: Vec<f64> = linspace(-25f64, 12f64, 50).collect();
+    // let snrs_db: Vec<f64> = linspace(-25f64, 10f64, 50).collect();
+    let snrs_db: Vec<f64> = linspace(-10f64, 50f64, 50).collect();
+    // let snrs_db: Vec<f64> = linspace(0.0, 13f64, 25).collect();
 
     let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
 
@@ -173,8 +210,27 @@ fn main() {
             |s| rx_qpsk_signal(rx_ofdm_signal(s, 16, 14)),
             snrs
         ),
+        // Chirp Spread Spectrum
+        BitErrorTest!(
+            "CSS-16",
+            |m| tx_css_signal(m, 16),
+            |s| rx_css_signal(s, 16),
+            snrs
+        ),
+        BitErrorTest!(
+            "CSS-128",
+            |m| tx_css_signal(m, 128),
+            |s| rx_css_signal(s, 128),
+            snrs
+        ),
+        BitErrorTest!(
+            "CSS-512",
+            |m| tx_css_signal(m, 512),
+            |s| rx_css_signal(s, 512),
+            snrs
+        ),
         // CSK
-        BitErrorTest!("CSK", tx_baseband_csk_signal, rx_baseband_csk_signal, snrs),
+        BitErrorTest!("CSK", tx_csk_signal, rx_csk_signal, snrs),
         // FH-OFDM-DCSK
         BitErrorTest!(
             "FH-OFDM-DCSK",
@@ -184,12 +240,22 @@ fn main() {
         ),
     ];
 
+    let bers: Vec<BitErrorResults> = bers.into_iter().map(|test| test.calc_bers()).collect();
+
     let theory_bers = [
         ("BPSK", bers!(ber_bpsk, snrs)),
         ("QPSK", bers!(ber_qpsk, snrs)),
         ("FSK", bers!(ber_bfsk, snrs)),
         ("16QAM", bers!(|snr| ber_qam(snr, 16), snrs)),
     ];
+
+    {
+        // Save the results to a JSON file.
+        let file = File::create("/tmp/bers.json").unwrap();
+        let mut writer = BufWriter::new(file);
+        serde_json::to_writer(&mut writer, &bers).unwrap();
+        writer.flush().unwrap();
+    }
 
     Python::with_gil(|py| {
         let matplotlib = py.import_bound("matplotlib").unwrap();
@@ -208,13 +274,13 @@ fn main() {
         locals.set_item("axes", axes).unwrap();
 
         // Plot the BER.
-        for ber_result in bers {
+        for ber_result in bers.iter() {
             let py_name = format!("bers_{}", ber_result.name).to_case(Case::Snake);
             locals.set_item(&py_name, &ber_result.bers).unwrap();
             py.eval_bound(
                 &format!(
-                    "axes.plot(snrs_db, {}, label='{}')",
-                    py_name, ber_result.name
+                    "axes.plot(snrs_db[:len({})], {}, label='{}')",
+                    py_name, py_name, ber_result.name
                 ),
                 None,
                 Some(&locals),
@@ -226,12 +292,14 @@ fn main() {
             .unwrap();
 
         for line in [
-            "axes.plot(snrs_db, bpsk_theory, label='BPSK Theoretical')",
+            // "axes.plot(snrs_db, bpsk_theory, label='BPSK Theoretical')",
             "axes.legend(loc='best')",
             "axes.set_yscale('log')",
+            "axes.set_xlabel('SNR (dB)')",
+            "axes.set_ylabel('BER')",
             "plt.show()",
         ] {
             py.eval_bound(line, None, Some(&locals)).unwrap();
         }
-    })
+    });
 }
