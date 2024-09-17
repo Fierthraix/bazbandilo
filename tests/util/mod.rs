@@ -153,16 +153,6 @@ macro_rules! error {
     };
 }
 
-pub fn not_inf(num: f64) -> f64 {
-    if num == std::f64::INFINITY {
-        std::f64::MAX
-    } else if num == std::f64::NEG_INFINITY {
-        -std::f64::MAX
-    } else {
-        num
-    }
-}
-
 pub fn fit_erfc(x: &[f64], y: &[f64]) -> (f64, f64, f64, f64) {
     Python::with_gil(|py| {
         let scipy = PyModule::import_bound(py, "scipy")?;
