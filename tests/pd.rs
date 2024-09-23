@@ -4,6 +4,7 @@ use convert_case::{Case, Casing};
 use kdam::{par_tqdm, BarExt};
 use num::Zero;
 use num_complex::Complex;
+use numpy::ndarray::{Array2, Axis};
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
 use rand::Rng;
@@ -18,6 +19,7 @@ use bazbandilo::{
     cdma::{tx_cdma_bpsk_signal, tx_cdma_qpsk_signal},
     csk::tx_csk_signal,
     css::tx_css_signal,
+    db,
     fh_ofdm_dcsk::tx_fh_ofdm_dcsk_signal,
     fsk::tx_bfsk_signal,
     hadamard::HadamardMatrix,
@@ -29,60 +31,121 @@ use bazbandilo::{
     undb, Bit,
 };
 
-trait Detector {
-    fn detect<I: Iterator<Item = Complex<f64>>>(signal: I) -> f64;
+fn dcs_detect(sxf: &Array2<Complex<f64>>) -> f64 {
+    let top = sxf.map(Complex::<f64>::norm_sqr).sum_axis(Axis(0));
+    let bot = sxf.row(0).map(Complex::<f64>::norm_sqr);
+
+    let lambda = (top / bot)
+        .into_iter()
+        .max_by(|a, b| a.partial_cmp(b).unwrap())
+        .unwrap();
+
+    10f64 * lambda.log10()
 }
 
-struct MaxCutDetector;
+fn max_cut_detect(sxf: &Array2<Complex<f64>>) -> f64 {
+    let lambda: f64 = sxf
+        .iter()
+        .map(|&s_i| s_i.norm_sqr())
+        .max_by(|a, b| a.partial_cmp(b).unwrap())
+        .unwrap();
 
-impl Detector for MaxCutDetector {
-    fn detect<I: Iterator<Item = Complex<f64>>>(signal: I) -> f64 {
-        let np = 64;
-        let n = 4096;
-        let lambda: f64 = ssca_base(&signal.take(n + np).collect::<Vec<Complex<f64>>>(), n, np)
-            .iter()
-            .map(|&s_i| s_i.norm_sqr())
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap();
-
-        10f64 * lambda.log10()
-    }
+    10f64 * lambda.log10()
 }
 
-struct EnergyDetector;
-
-impl Detector for EnergyDetector {
-    fn detect<I: Iterator<Item = Complex<f64>>>(signal: I) -> f64 {
-        10f64 * (signal.map(|s_i| s_i.norm_sqr()).sum::<f64>()).log10()
-    }
+fn energy_detect(signal: &[Complex<f64>]) -> f64 {
+    10f64 * (signal.iter().map(|&s_i| s_i.norm_sqr()).sum::<f64>()).log10()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+enum Detector {
+    Energy,
+    MaxCut,
+    Dcs,
+}
+
+impl Detector {
+    fn get(&self) -> &str {
+        match self {
+            Detector::Energy => "Energy Detector",
+            Detector::MaxCut => "Max Cut Detector",
+            Detector::Dcs => "DCS Detector",
+        }
+    }
+    fn iter() -> impl Iterator<Item = Detector> {
+        [Detector::Energy, Detector::MaxCut, Detector::Dcs].into_iter()
+    }
+}
+
+fn run_detectors<I: Iterator<Item = Complex<f64>>>(signal: I) -> Vec<DetectorOutput> {
+    let np = 64;
+    let n = 4096;
+    let chan_signal: Vec<Complex<f64>> = signal.take(n + np).collect();
+    let sxf = ssca_base(&chan_signal, n, np);
+
+    vec![
+        DetectorOutput {
+            kind: Detector::Energy,
+            λ: energy_detect(&chan_signal),
+        },
+        DetectorOutput {
+            kind: Detector::MaxCut,
+            λ: max_cut_detect(&sxf),
+        },
+        DetectorOutput {
+            kind: Detector::Dcs,
+            λ: dcs_detect(&sxf),
+        },
+    ]
+}
+
+/// The output of a detector on a lone signal.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct DetectorOutput {
+    kind: Detector,
+    λ: f64,
+}
+
+/// The output of a detector on many snrs.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct DetectorResults {
-    name: String,
+    kind: Detector,
+    snrs: Vec<f64>,
     h0_λs: Vec<Vec<f64>>,
     h1_λs: Vec<Vec<f64>>,
+}
+
+/// The result of running a modulation at many SNRS many times.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ModulationDetectorResults {
+    name: String,
+    results: Vec<DetectorResults>,
     snrs: Vec<f64>,
 }
 
+/// Detector Test harness.
 struct DetectorTest<'a> {
-    name: String,
     snrs: Vec<f64>,
-    run_fn: &'a dyn Fn(&[f64]) -> DetectorResults,
+    run_fn: &'a dyn Fn(&[f64]) -> ModulationDetectorResults,
 }
 
 impl<'a> DetectorTest<'a> {
-    fn run(self) -> DetectorResults {
+    fn run(self) -> ModulationDetectorResults {
         (self.run_fn)(&self.snrs)
     }
 }
 
+/// Youden-J calculation of detector output.
+#[derive(Clone)]
 struct LogRegressResults {
+    name: String,
     detector: DetectorResults,
     youden_js: Vec<f64>,
 }
 
-fn log_regress(results: &DetectorResults) -> LogRegressResults {
+struct ModulationLogRegressResults(Vec<LogRegressResults>);
+
+fn log_regress(results: &DetectorResults, name: &str) -> LogRegressResults {
     let youden_js: Vec<f64> = Python::with_gil(|py| {
         let pandas = py.import_bound("pandas").unwrap();
         let numpy = py.import_bound("numpy").unwrap();
@@ -160,21 +223,48 @@ df_test["youden_j"] = df_test.tpr - df_test.fpr
         youden_js
     });
     LogRegressResults {
+        name: name.into(),
         detector: results.clone(),
         youden_js,
     }
 }
 
+fn remap_results(λs: &[Vec<Vec<DetectorOutput>>], kind: &str) -> Vec<Vec<f64>> {
+    let λs: Vec<Vec<f64>> = λs
+        .iter()
+        .map(|input| {
+            input
+                .iter()
+                .map(|attempt| {
+                    attempt
+                        .iter()
+                        .filter_map(|dx_i| {
+                            if dx_i.kind.get() == kind {
+                                Some(dx_i.λ)
+                            } else {
+                                None
+                            }
+                        })
+                        .next()
+                        .unwrap()
+                })
+                .collect()
+        })
+        .collect();
+    λs
+}
+
 const NUM_BITS: usize = 65536;
-// const NUM_ATTEMPTS: usize = 200;
-const NUM_ATTEMPTS: usize = 75;
+// const NUM_ATTEMPTS: usize = 250;
+// const NUM_ATTEMPTS: usize = 75;
+const NUM_ATTEMPTS: usize = 20;
 
 macro_rules! DetectorTest {
     ($name:expr, $tx_fn:expr, $snrs:expr) => {{
         DetectorTest {
-            name: String::from($name),
             snrs: $snrs.clone(),
             run_fn: &|snrs: &[f64]| {
+                // Calculate the Bit-Energy.
                 let (eb, num_samps) = {
                     let mut rng = rand::thread_rng();
                     let data = (0..NUM_BITS).map(|_| rng.gen::<Bit>());
@@ -185,6 +275,7 @@ macro_rules! DetectorTest {
                     (energy / NUM_BITS as f64, tx_signal.len())
                 };
 
+                // Make a Progress Bar.
                 let pb = {
                     let mut pb = par_tqdm!(total = $snrs.len());
                     pb.refresh().unwrap();
@@ -192,28 +283,32 @@ macro_rules! DetectorTest {
                     Mutex::new(pb)
                 };
 
-                let n0s = snrs.par_iter().map(|snr| (eb / (2f64 * snr)).sqrt());
-                let (h0_λs, h1_λs) = n0s
-                    .map(|n0| {
+                // Calculate the detector outputs for the modulation.
+                let (unmapped_h0_λs, unmapped_h1_λs): (
+                    Vec<Vec<Vec<DetectorOutput>>>,
+                    Vec<Vec<Vec<DetectorOutput>>>,
+                ) = snrs
+                    .par_iter()
+                    .map(|&snr| {
                         // Generate signals.
-                        let h0_λs: Vec<f64> = (0..NUM_ATTEMPTS)
+                        let n0: f64 = (eb / (2f64 * snr)).sqrt();
+
+                        let h0_λs: Vec<Vec<DetectorOutput>> = (0..NUM_ATTEMPTS)
                             .into_par_iter()
                             .map(|_| {
                                 let noisy_signal =
                                     awgn((0..num_samps).map(|_| Complex::zero()), n0);
-                                MaxCutDetector::detect(noisy_signal)
+                                run_detectors(noisy_signal)
                             })
                             .collect();
 
-                        let h1_λs: Vec<f64> = (0..NUM_ATTEMPTS)
+                        let h1_λs: Vec<Vec<DetectorOutput>> = (0..NUM_ATTEMPTS)
                             .into_par_iter()
                             .map(|_| {
                                 let mut rng = rand::thread_rng();
                                 let data = (0..NUM_BITS).map(|_| rng.gen::<Bit>());
-                                let signal = $tx_fn(data);
-                                let noisy_signal = awgn(signal, n0);
 
-                                MaxCutDetector::detect(noisy_signal)
+                                run_detectors(awgn($tx_fn(data), n0))
                             })
                             .collect();
 
@@ -225,10 +320,20 @@ macro_rules! DetectorTest {
                     .unzip();
 
                 println!("Finished with {}.", $name);
-                DetectorResults {
+                ModulationDetectorResults {
                     name: String::from($name),
-                    h0_λs,
-                    h1_λs,
+                    results: Detector::iter()
+                        .map(|dx| {
+                            let h0_λs = remap_results(&unmapped_h0_λs, dx.get());
+                            let h1_λs = remap_results(&unmapped_h1_λs, dx.get());
+                            DetectorResults {
+                                kind: dx,
+                                snrs: $snrs.to_vec(),
+                                h0_λs,
+                                h1_λs,
+                            }
+                        })
+                        .collect(),
                     snrs: $snrs.to_vec(),
                 }
             },
@@ -236,11 +341,63 @@ macro_rules! DetectorTest {
     }};
 }
 
+fn plot_thing(regressions: Vec<LogRegressResults>, snrs: &[f64]) {
+    Python::with_gil(|py| {
+        let cycler = py.import_bound("cycler").unwrap();
+        let matplotlib = py.import_bound("matplotlib").unwrap();
+        let plt = py.import_bound("matplotlib.pyplot").unwrap();
+        let locals =
+            [("cycler", cycler), ("matplotlib", matplotlib), ("plt", plt)].into_py_dict_bound(py);
+
+        let snrs_db: Vec<f64> = snrs.iter().cloned().map(db).collect();
+        locals.set_item("snrs", snrs).unwrap();
+        locals.set_item("snrs_db", &snrs_db).unwrap();
+
+        let (fig, axes): (&PyAny, &PyAny) = py
+            .eval_bound("plt.subplots(1)", None, Some(&locals))
+            .unwrap()
+            .extract()
+            .unwrap();
+        locals.set_item("fig", fig).unwrap();
+        locals.set_item("axes", axes).unwrap();
+
+        py.run_bound("cycles = (cycler.cycler(color=['r', 'g', 'b', 'c', 'm', 'y']) * cycler.cycler(linestyle=['-', ':', '-.']))", None, Some(&locals)).unwrap();
+        py.eval_bound("axes.set_prop_cycle(cycles)", None, Some(&locals))
+            .unwrap();
+
+        // Plot the BER.
+        for modulation in regressions.iter() {
+            let py_name = format!("youden_js_{}", modulation.name).to_case(Case::Snake);
+            locals.set_item(&py_name, &modulation.youden_js).unwrap();
+            py.eval_bound(
+                &format!(
+                    "axes.plot(snrs_db[:len({})], {}, label='{}')",
+                    py_name, py_name, modulation.name,
+                ),
+                None,
+                Some(&locals),
+            )
+            .unwrap();
+        }
+        for line in [
+            &format!("axes.set_title('{}')", regressions[0].name),
+            "axes.legend(loc='best')",
+            "axes.set_xlabel('SNR (dB)')",
+            r"axes.set_ylabel('$\mathbb{P}_d$')",
+            "plt.show()",
+        ] {
+            println!("{}", line);
+            py.eval_bound(line, None, Some(&locals)).unwrap();
+        }
+    });
+}
+
 #[test]
 fn main() {
     // let snrs_db: Vec<f64> = linspace(-10f64, 12f64, 50).collect();
     // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
-    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 50).collect();
+    // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 50).collect();
+    let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
 
     let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
 
@@ -282,57 +439,44 @@ fn main() {
         DetectorTest!("FH-OFDM-DCSK", tx_fh_ofdm_dcsk_signal, snrs),
     ];
 
-    let results: Vec<DetectorResults> = harness
+    let results: Vec<ModulationDetectorResults> = harness
         .into_iter()
         .map(|modulation| modulation.run())
         .collect();
 
-    let regressions: Vec<LogRegressResults> = results
-        // .into_par_iter()
+    let regressions: Vec<ModulationLogRegressResults> = results
         .iter()
-        // .map(|test_result| log_regress(&test_result))
-        .map(log_regress)
+        .map(|test_results| {
+            ModulationLogRegressResults(
+                test_results
+                    .results
+                    .iter()
+                    .map(|dx_result| log_regress(dx_result, &test_results.name))
+                    .collect(),
+            )
+        })
         .collect();
 
-    Python::with_gil(|py| {
-        let matplotlib = py.import_bound("matplotlib").unwrap();
-        let plt = py.import_bound("matplotlib.pyplot").unwrap();
-        let locals = [("matplotlib", matplotlib), ("plt", plt)].into_py_dict_bound(py);
-
-        locals.set_item("snrs", &snrs).unwrap();
-        locals.set_item("snrs_db", &snrs_db).unwrap();
-
-        let (fig, axes): (&PyAny, &PyAny) = py
-            .eval_bound("plt.subplots(1)", None, Some(&locals))
-            .unwrap()
-            .extract()
-            .unwrap();
-        locals.set_item("fig", fig).unwrap();
-        locals.set_item("axes", axes).unwrap();
-
-        // Plot the BER.
-        for modulation in regressions.iter() {
-            let py_name = format!("youden_js_{}", modulation.detector.name).to_case(Case::Snake);
-            locals.set_item(&py_name, &modulation.youden_js).unwrap();
-            py.eval_bound(
-                &format!(
-                    "axes.plot(snrs_db[:len({})], {}, label='{}')",
-                    py_name, py_name, modulation.detector.name
-                ),
-                None,
-                Some(&locals),
-            )
-            .unwrap();
-        }
-        for line in [
-            "axes.legend(loc='best')",
-            // "axes.set_yscale('log')",
-            "axes.set_xlabel('SNR (dB)')",
-            // "axes.set_ylabel('$P_d$')",
-            "plt.show()",
-        ] {
-            println!("{}", line);
-            py.eval_bound(line, None, Some(&locals)).unwrap();
-        }
-    });
+    for dx in Detector::iter() {
+        let log_regresses = {
+            regressions
+                .iter()
+                .map(|mod_log_result| {
+                    mod_log_result
+                        .0
+                        .iter()
+                        .filter_map(|log_result| {
+                            if log_result.detector.kind.get() == dx.get() {
+                                Some(log_result.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .next()
+                        .unwrap()
+                })
+                .collect()
+        };
+        plot_thing(log_regresses, &snrs);
+    }
 }
