@@ -34,6 +34,9 @@ install:
 jupyter:
 	poetry run jupyter lab
 
+pd:
+	cargo test --test pd -- --nocapture
+
 plop arg:
 	poetry run python3 -m plop.collector {{ arg }}
 
