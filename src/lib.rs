@@ -30,7 +30,7 @@ use crate::{
     cdma::{rx_cdma_bpsk_signal, rx_cdma_qpsk_signal, tx_cdma_bpsk_signal, tx_cdma_qpsk_signal},
     csk::{rx_csk_signal, tx_csk_signal},
     // css::tx_css_signal,
-    dcsk::{rx_dcsk_signal, tx_dcsk_signal},
+    dcsk::{rx_dcsk_signal, rx_qcsk_signal, tx_dcsk_signal, tx_qcsk_signal},
     fh_ofdm_dcsk::{rx_fh_ofdm_dcsk_signal, tx_fh_ofdm_dcsk_signal},
     fsk::{rx_bfsk_signal, tx_bfsk_signal},
     hadamard::HadamardMatrix,
@@ -524,6 +524,14 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     fn rx_dcsk(signal: Vec<Complex<f64>>) -> Vec<Bit> {
         rx_dcsk_signal(signal.into_iter()).collect()
     }
+    #[pyfunction]
+    fn tx_qcsk(data: Vec<Bit>) -> Vec<Complex<f64>> {
+        tx_qcsk_signal(data.into_iter()).collect()
+    }
+    #[pyfunction]
+    fn rx_qcsk(signal: Vec<Complex<f64>>) -> Vec<Bit> {
+        rx_qcsk_signal(signal.into_iter()).collect()
+    }
 
     #[pyfunction]
     fn tx_fh_ofdm_dcsk(data: Vec<Bit>) -> Vec<Complex<f64>> {
@@ -552,6 +560,8 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rx_csk, m)?)?;
     m.add_function(wrap_pyfunction!(tx_dcsk, m)?)?;
     m.add_function(wrap_pyfunction!(rx_dcsk, m)?)?;
+    m.add_function(wrap_pyfunction!(tx_qcsk, m)?)?;
+    m.add_function(wrap_pyfunction!(rx_qcsk, m)?)?;
     m.add_function(wrap_pyfunction!(tx_fh_ofdm_dcsk, m)?)?;
     m.add_function(wrap_pyfunction!(rx_fh_ofdm_dcsk, m)?)?;
     m.add_function(wrap_pyfunction!(random_data, m)?)?;
