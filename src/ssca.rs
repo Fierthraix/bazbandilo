@@ -64,7 +64,7 @@ pub fn ssca_base(s: &[Complex<f64>], n: usize, np: usize) -> Array2<Complex<f64>
 }
 
 #[inline]
-fn ssca_mapper(sx: &Array2<Complex<f64>>) -> Array2<Complex<f64>> {
+pub fn ssca_mapper(sx: &Array2<Complex<f64>>) -> Array2<Complex<f64>> {
     let (n, np) = sx.dim();
     let mut sxf: Array2<Complex<f64>> = Array2::zeros((np + 1, 2 * n + 1));
     // Step 5.
