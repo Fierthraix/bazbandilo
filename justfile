@@ -51,6 +51,5 @@ shell *kargs:
 interactive *kargs:
 	poetry run python3 -i {{ kargs }}
 
-test:
-    @just make
-    poetry run pytest "{{ test_dir }}"
+test arg:
+	cargo test --test {{ arg}} -- --nocapture

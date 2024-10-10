@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::sync::Mutex;
 
 use convert_case::{Case, Casing};
@@ -20,6 +22,7 @@ use bazbandilo::{
     csk::tx_csk_signal,
     css::tx_css_signal,
     db,
+    dcsk::{rx_dcsk_signal, rx_qcsk_signal, tx_dcsk_signal, tx_qcsk_signal},
     fh_ofdm_dcsk::tx_fh_ofdm_dcsk_signal,
     fsk::tx_bfsk_signal,
     hadamard::HadamardMatrix,
@@ -27,7 +30,7 @@ use bazbandilo::{
     ofdm::tx_ofdm_signal,
     psk::{tx_bpsk_signal, tx_qpsk_signal},
     qam::tx_qam_signal,
-    ssca::ssca_base,
+    ssca::{ssca_base, ssca_mapper},
     undb, Bit,
 };
 
@@ -82,6 +85,7 @@ fn run_detectors<I: Iterator<Item = Complex<f64>>>(signal: I) -> Vec<DetectorOut
     let n = 4096;
     let chan_signal: Vec<Complex<f64>> = signal.take(n + np).collect();
     let sxf = ssca_base(&chan_signal, n, np);
+    // let sxf_mapped = ssca_mapper(&sxf);
 
     vec![
         DetectorOutput {
@@ -94,6 +98,7 @@ fn run_detectors<I: Iterator<Item = Complex<f64>>>(signal: I) -> Vec<DetectorOut
         },
         DetectorOutput {
             kind: Detector::Dcs,
+            // λ: dcs_detect(&sxf_mapped),
             λ: dcs_detect(&sxf),
         },
     ]
@@ -255,9 +260,10 @@ fn remap_results(λs: &[Vec<Vec<DetectorOutput>>], kind: &str) -> Vec<Vec<f64>> 
 }
 
 const NUM_BITS: usize = 65536;
+const NUM_ATTEMPTS: usize = 1000;
 // const NUM_ATTEMPTS: usize = 250;
 // const NUM_ATTEMPTS: usize = 75;
-const NUM_ATTEMPTS: usize = 20;
+// const NUM_ATTEMPTS: usize = 20;
 
 macro_rules! DetectorTest {
     ($name:expr, $tx_fn:expr, $snrs:expr) => {{
@@ -396,21 +402,29 @@ fn plot_thing(regressions: Vec<LogRegressResults>, snrs: &[f64]) {
 fn main() {
     // let snrs_db: Vec<f64> = linspace(-10f64, 12f64, 50).collect();
     // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
-    // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 50).collect();
-    let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
+    // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 15).collect();
+    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 125).collect();
 
     let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
 
-    let h = HadamardMatrix::new(32);
-    let key = h.key(2);
+    let h_16 = HadamardMatrix::new(16);
+    let h_32 = HadamardMatrix::new(32);
+    let h_64 = HadamardMatrix::new(64);
+    let key_16 = h_16.key(2);
+    let key_32 = h_32.key(2);
+    let key_64 = h_64.key(2);
 
     let harness = [
         // PSK
         DetectorTest!("BPSK", tx_bpsk_signal, snrs),
         DetectorTest!("QPSK", tx_qpsk_signal, snrs),
         // CDMA
-        DetectorTest!("CDMA-BPSK", |m| tx_cdma_bpsk_signal(m, key), snrs),
-        DetectorTest!("CDMA-QPSK", |m| tx_cdma_qpsk_signal(m, key), snrs),
+        DetectorTest!("CDMA-BPSK-16", |m| tx_cdma_bpsk_signal(m, key_16), snrs),
+        DetectorTest!("CDMA-QPSK-16", |m| tx_cdma_qpsk_signal(m, key_16), snrs),
+        DetectorTest!("CDMA-BPSK-32", |m| tx_cdma_bpsk_signal(m, key_32), snrs),
+        DetectorTest!("CDMA-QPSK-32", |m| tx_cdma_qpsk_signal(m, key_32), snrs),
+        DetectorTest!("CDMA-BPSK-64", |m| tx_cdma_bpsk_signal(m, key_64), snrs),
+        DetectorTest!("CDMA-QPSK-64", |m| tx_cdma_qpsk_signal(m, key_64), snrs),
         // QAM
         DetectorTest!("4QAM", |m| tx_qam_signal(m, 4), snrs),
         DetectorTest!("16QAM", |m| tx_qam_signal(m, 16), snrs),
@@ -435,6 +449,8 @@ fn main() {
         DetectorTest!("CSS-512", |m| tx_css_signal(m, 512), snrs),
         // CSK
         DetectorTest!("CSK", tx_csk_signal, snrs),
+        DetectorTest!("DCSK", tx_dcsk_signal, snrs),
+        DetectorTest!("QCSK", tx_qcsk_signal, snrs),
         // FH-OFDM-DCSK
         DetectorTest!("FH-OFDM-DCSK", tx_fh_ofdm_dcsk_signal, snrs),
     ];
@@ -443,6 +459,14 @@ fn main() {
         .into_iter()
         .map(|modulation| modulation.run())
         .collect();
+
+    // Save results to file.
+    {
+        let file = File::create("/tmp/results.json").unwrap();
+        let mut writer = BufWriter::new(file);
+        serde_json::to_writer(&mut writer, &results).unwrap();
+        writer.flush().unwrap();
+    }
 
     let regressions: Vec<ModulationLogRegressResults> = results
         .iter()
@@ -458,7 +482,7 @@ fn main() {
         .collect();
 
     for dx in Detector::iter() {
-        let log_regresses = {
+        let log_regresses: Vec<LogRegressResults> = {
             regressions
                 .iter()
                 .map(|mod_log_result| {
@@ -477,6 +501,6 @@ fn main() {
                 })
                 .collect()
         };
-        plot_thing(log_regresses, &snrs);
+        // plot_thing(log_regresses, &snrs);
     }
 }

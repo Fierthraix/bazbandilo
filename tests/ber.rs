@@ -21,6 +21,7 @@ use bazbandilo::{
     cdma::{rx_cdma_bpsk_signal, rx_cdma_qpsk_signal, tx_cdma_bpsk_signal, tx_cdma_qpsk_signal},
     csk::{rx_csk_signal, tx_csk_signal},
     css::{rx_css_signal, tx_css_signal},
+    dcsk::{rx_dcsk_signal, rx_qcsk_signal, tx_dcsk_signal, tx_qcsk_signal},
     fh_ofdm_dcsk::{rx_fh_ofdm_dcsk_signal, tx_fh_ofdm_dcsk_signal},
     fsk::{rx_bfsk_signal, tx_bfsk_signal},
     hadamard::HadamardMatrix,
@@ -61,7 +62,7 @@ impl<'a> BitErrorTest<'a> {
     }
 }
 
-const NUM_ERRORS: usize = 10_000;
+const NUM_ERRORS: usize = 100_000;
 // const NUM_ERRORS: usize = 100;
 const BER_CUTOFF: f64 = 10e-4;
 
@@ -140,13 +141,17 @@ fn main() {
     // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
     // let snrs_db: Vec<f64> = linspace(-25f64, 12f64, 50).collect();
     // let snrs_db: Vec<f64> = linspace(-25f64, 10f64, 50).collect();
-    let snrs_db: Vec<f64> = linspace(-10f64, 50f64, 50).collect();
+    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 150).collect();
     // let snrs_db: Vec<f64> = linspace(0.0, 13f64, 25).collect();
 
     let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
 
-    let h = HadamardMatrix::new(32);
-    let key = h.key(2);
+    let h_16 = HadamardMatrix::new(16);
+    let h_32 = HadamardMatrix::new(32);
+    let h_64 = HadamardMatrix::new(64);
+    let key_16 = h_16.key(2);
+    let key_32 = h_32.key(2);
+    let key_64 = h_64.key(2);
 
     let bers = [
         // PSK
@@ -154,15 +159,39 @@ fn main() {
         BitErrorTest!("QPSK", tx_qpsk_signal, rx_qpsk_signal, snrs),
         // CDMA
         BitErrorTest!(
-            "CDMA-BPSK",
-            |m| tx_cdma_bpsk_signal(m, key),
-            |s| rx_cdma_bpsk_signal(s, key),
+            "CDMA-BPSK-16",
+            |m| tx_cdma_bpsk_signal(m, key_16),
+            |s| rx_cdma_bpsk_signal(s, key_16),
             snrs
         ),
         BitErrorTest!(
-            "CDMA-QPSK",
-            |m| tx_cdma_qpsk_signal(m, key),
-            |s| rx_cdma_qpsk_signal(s, key),
+            "CDMA-QPSK-16",
+            |m| tx_cdma_qpsk_signal(m, key_16),
+            |s| rx_cdma_qpsk_signal(s, key_16),
+            snrs
+        ),
+        BitErrorTest!(
+            "CDMA-BPSK-32",
+            |m| tx_cdma_bpsk_signal(m, key_32),
+            |s| rx_cdma_bpsk_signal(s, key_32),
+            snrs
+        ),
+        BitErrorTest!(
+            "CDMA-QPSK-32",
+            |m| tx_cdma_qpsk_signal(m, key_32),
+            |s| rx_cdma_qpsk_signal(s, key_32),
+            snrs
+        ),
+        BitErrorTest!(
+            "CDMA-BPSK-64",
+            |m| tx_cdma_bpsk_signal(m, key_64),
+            |s| rx_cdma_bpsk_signal(s, key_64),
+            snrs
+        ),
+        BitErrorTest!(
+            "CDMA-QPSK-64",
+            |m| tx_cdma_qpsk_signal(m, key_64),
+            |s| rx_cdma_qpsk_signal(s, key_64),
             snrs
         ),
         // QAM
@@ -231,6 +260,8 @@ fn main() {
         ),
         // CSK
         BitErrorTest!("CSK", tx_csk_signal, rx_csk_signal, snrs),
+        BitErrorTest!("DCSK", tx_dcsk_signal, rx_dcsk_signal, snrs),
+        BitErrorTest!("QCSK", tx_qcsk_signal, rx_qcsk_signal, snrs),
         // FH-OFDM-DCSK
         BitErrorTest!(
             "FH-OFDM-DCSK",
@@ -257,6 +288,7 @@ fn main() {
         writer.flush().unwrap();
     }
 
+    /*
     Python::with_gil(|py| {
         let matplotlib = py.import_bound("matplotlib").unwrap();
         let plt = py.import_bound("matplotlib.pyplot").unwrap();
@@ -302,4 +334,5 @@ fn main() {
             py.eval_bound(line, None, Some(&locals)).unwrap();
         }
     });
+    */
 }
