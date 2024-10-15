@@ -22,7 +22,7 @@ use bazbandilo::{
     csk::tx_csk_signal,
     css::tx_css_signal,
     db,
-    dcsk::{rx_dcsk_signal, rx_qcsk_signal, tx_dcsk_signal, tx_qcsk_signal},
+    dcsk::{tx_dcsk_signal, tx_qcsk_signal},
     fh_ofdm_dcsk::tx_fh_ofdm_dcsk_signal,
     fsk::tx_bfsk_signal,
     hadamard::HadamardMatrix,
