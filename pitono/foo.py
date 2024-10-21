@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from util import db
+from util import db, timeit
 
 from cycler import cycler
 import multiprocessing
@@ -48,20 +48,24 @@ def log_regress(h0_λs: List[float], h1_λs: List[float]) -> float:
     return max(abs(df_test["youden_j"]))
 
 
+CYCLES: cycler = cycler(color=["r", "g", "b", "c", "m", "y"]) * cycler(
+    linestyle=[
+        "-",
+        ":",
+        "-.",
+        "dashed",
+        (0, (3, 1, 1, 1, 1, 1)),
+        (0, (3, 5, 1, 5)),
+    ]
+)
+
+
 def plot_youden_j_with_multiple_modulations(
     modulation_test_results: List[Dict[str, object]], kind: str, save=False
 ):
     fig, ax = plt.subplots()
 
-    cycles = cycler(color=["r", "g", "b", "c", "m", "y"]) * cycler(
-        linestyle=[
-            "-",
-            ":",
-            "-.",
-            "dashed",
-        ]
-    )
-    ax.set_prop_cycle(cycles)
+    ax.set_prop_cycle(CYCLES)
     for modulation in modulation_test_results:
         snrs = modulation["snrs"]
         youden_js: List[float] = modulation[kind]["youden_js"]
@@ -73,11 +77,11 @@ def plot_youden_j_with_multiple_modulations(
     fig.suptitle(kind)
     if save:
         fig.set_size_inches(16, 9)
-        fig.savefig(f'/tmp/Youden-J_{kind}_multiple_modulations.png')
+        fig.savefig(f"/tmp/Youden-J_{kind}_multiple_modulations.png")
 
 
 def plot_pd_vs_ber(
-    regressed: List[Dict[str, object]], bers: List[Dict[str, object]], save=False
+    modulation: Dict[str, object], bers: List[Dict[str, object]], save=False
 ):
     try:
         mod_ber = next(b for b in bers if b["name"] == modulation["name"])
@@ -107,7 +111,7 @@ def plot_pd_vs_ber(
     # pd_ax.plot(-12.0556, good_pd, "bo")
     # pd_ax.axhline(good_pd, color='Blue', ls='--', label=f'Acceptable ℙd ({good_pd})')
     pd_ax.tick_params(axis="y", colors="Blue")
-    pd_ax.set_ylabel("Probability of Detection ($\mathcal{P}_D$)", color="Blue")
+    pd_ax.set_ylabel(r"Probability of Detection ($\mathcal{P}_D$)", color="Blue")
     pd_ax.legend(loc="best")
     ax.set_xlabel("Signal to Noise Ratio dB (SNR dB)")
     ax.set_title(modulation["name"])
@@ -142,15 +146,7 @@ def parse_results(modulation: Dict[str, object]) -> Dict[str, object]:
 
 def plot_all_bers(bers: List[Dict[str, object]], save=False):
     fig, ax = plt.subplots(1)
-    cycles = cycler(color=["r", "g", "b", "c", "m", "y"]) * cycler(
-        linestyle=[
-            "-",
-            ":",
-            "-.",
-            "dashed",
-        ]
-    )
-    ax.set_prop_cycle(cycles)
+    ax.set_prop_cycle(CYCLES)
     for ber in bers:
         ax.plot(db(ber["snrs"]), ber["bers"], label=ber["name"])
     ax.legend(loc="best")
@@ -160,7 +156,35 @@ def plot_all_bers(bers: List[Dict[str, object]], save=False):
     ax.set_title("BER vs SNR (All Modulations)")
     if save:
         fig.set_size_inches(16, 9)
-        fig.savefig(f'/tmp/bers_multiple_modulations.png')
+        fig.savefig("/tmp/bers_multiple_modulations.png")
+
+
+def plot_pd_vs_ber_metric(
+    modulation_test_results: List[Dict[str, object]],
+    bers: List[Dict[str, object]],
+    kind: str,
+    save=False,
+):
+    fig, ax = plt.subplots()
+    ax.set_prop_cycle(CYCLES)
+    for modulation in modulation_test_results:
+        try:
+            mod_ber = next(b for b in bers if b["name"] == modulation["name"])
+        except TypeError:
+            return
+
+        x = modulation[kind]["youden_js"]
+        y = mod_ber["bers"]
+        r = min(len(x), len(y))
+        ax.plot(x[:r], y[:r], label=modulation["name"])
+    ax.set_xlabel(r"Probability of Detection ($\mathcal{P}_D$)")
+    ax.set_ylabel("Bit Error Rate (BER)")
+    ax.set_title(f"{kind}" + r"Detector - BER vs $\mathcal{{P}}_D$")
+    ax.legend(loc="best")
+
+    if save:
+        fig.set_size_inches(16, 9)
+        fig.savefig(f"/tmp/covert_metric_{kind}.png")
 
 
 if __name__ == "__main__":
@@ -176,18 +200,19 @@ if __name__ == "__main__":
 
     CWD: Path = Path(__file__).parent
 
-    # Load from JSON.
-    results_file: Path = CWD.parent / "results_curr.json"
-    with results_file.open("r") as f:
-        results = json.load(f)
+    with timeit('Loading Data') as _:
+        # Load from JSON.
+        results_file: Path = CWD.parent / "results_curr.json"
+        with results_file.open("r") as f:
+            results = json.load(f)
 
-    bers_file: Path = CWD.parent / "bers_curr.json"
-    with bers_file.open("r") as f:
-        bers = json.load(f)
+        bers_file: Path = CWD.parent / "bers_curr.json"
+        with bers_file.open("r") as f:
+            bers = json.load(f)
 
     # Parse and Log Regress results.
     # regressed: List[Dict[str, object]] = list(map(parse_results, results))
-    with multiprocessing.Pool() as p:
+    with multiprocessing.Pool() as p, timeit("Logistic Regresstion") as _:
         regressed: List[Dict[str, object]] = p.map(parse_results, results)
 
     save = True
@@ -195,8 +220,11 @@ if __name__ == "__main__":
         plot_youden_j_with_multiple_modulations(regressed, detector, save=save)
 
     for modulation in regressed:
-        plot_pd_vs_ber(regressed, bers, save=save)
+        plot_pd_vs_ber(modulation, bers, save=save)
 
     plot_all_bers(bers, save=save)
+
+    for detector in DETECTORS:
+        plot_pd_vs_ber_metric(regressed, bers, detector, save=save)
 
     plt.show()
