@@ -289,20 +289,26 @@ mod tests {
 }
 
 #[pyfunction]
-fn dcs_detector(signal: Vec<Complex<f64>>) -> f64 {
+fn dcs_detector(signal: Vec<Complex<f64>>) -> Vec<f64> {
     let np = 64;
     let n = 4096;
-    let sx = ssca_base(&signal, n, np);
+    // let sx = ssca_base(&signal, n, np);
+    let sxf = ssca_mapped(&signal, n, np);
 
-    let top = sx.map(Complex::<f64>::norm_sqr).sum_axis(Axis(0));
-    let bot = sx.row(0).map(Complex::<f64>::norm_sqr);
+    let top = sxf.map(Complex::<f64>::norm_sqr).sum_axis(Axis(1));
+    let middle: usize = sxf.shape()[1] / 2;
+    let bot = sxf.column(middle).map(Complex::<f64>::norm_sqr);
 
-    let lambda = (top / bot)
-        .into_iter()
-        .max_by(|a, b| a.partial_cmp(b).unwrap())
-        .unwrap();
+    let x = top / bot;
+    let y = 10f64 * x.map(|i| 10f64 * i.log10());
+    y.to_vec()
 
-    10f64 * lambda.log10()
+    // let lambda = (top / bot)
+    //     .into_iter()
+    //     .max_by(|a, b| a.partial_cmp(b).unwrap())
+    //     .unwrap();
+
+    // 10f64 * lambda.log10()
 }
 
 #[pyfunction]
