@@ -53,3 +53,10 @@ interactive *kargs:
 
 test arg:
 	cargo test --test {{ arg}} -- --nocapture
+
+run:
+	# @just ber
+	# cp /tmp/bers.json bers_curr.json
+	@just pd
+	cp /tmp/results.json results_curr.json
+	@just i ./pitono/foo.py
