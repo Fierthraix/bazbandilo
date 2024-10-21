@@ -4,7 +4,8 @@ use std::sync::Mutex;
 
 use convert_case::{Case, Casing};
 use kdam::{par_tqdm, BarExt};
-use num::Zero;
+use num::traits::float::FloatCore;
+use num::{Float, Zero};
 use num_complex::Complex;
 use numpy::ndarray::{Array2, Axis};
 use pyo3::prelude::*;
@@ -26,6 +27,7 @@ use bazbandilo::{
     fh_ofdm_dcsk::tx_fh_ofdm_dcsk_signal,
     fsk::tx_bfsk_signal,
     hadamard::HadamardMatrix,
+    iter::Iter,
     linspace,
     ofdm::tx_ofdm_signal,
     psk::{tx_bpsk_signal, tx_qpsk_signal},
@@ -35,12 +37,14 @@ use bazbandilo::{
 };
 
 fn dcs_detect(sxf: &Array2<Complex<f64>>) -> f64 {
-    let top = sxf.map(Complex::<f64>::norm_sqr).sum_axis(Axis(0));
-    let bot = sxf.row(0).map(Complex::<f64>::norm_sqr);
+    let top = sxf.map(Complex::<f64>::norm_sqr).sum_axis(Axis(1));
+    let middle: usize = sxf.shape()[1] / 2;
+    let bot = sxf.column(middle).map(Complex::<f64>::norm_sqr);
 
     let lambda = (top / bot)
         .into_iter()
-        .max_by(|a, b| a.partial_cmp(b).unwrap())
+        .map(|x| if x.is_normal() { x } else { 0f64 })
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or_else(|| panic!("{}, {}", a, b)))
         .unwrap();
 
     10f64 * lambda.log10()
@@ -85,7 +89,7 @@ fn run_detectors<I: Iterator<Item = Complex<f64>>>(signal: I) -> Vec<DetectorOut
     let n = 4096;
     let chan_signal: Vec<Complex<f64>> = signal.take(n + np).collect();
     let sxf = ssca_base(&chan_signal, n, np);
-    // let sxf_mapped = ssca_mapper(&sxf);
+    let sxf_mapped = ssca_mapper(&sxf);
 
     vec![
         DetectorOutput {
@@ -98,8 +102,8 @@ fn run_detectors<I: Iterator<Item = Complex<f64>>>(signal: I) -> Vec<DetectorOut
         },
         DetectorOutput {
             kind: Detector::Dcs,
-            // λ: dcs_detect(&sxf_mapped),
-            λ: dcs_detect(&sxf),
+            λ: dcs_detect(&sxf_mapped),
+            // λ: dcs_detect(&sxf),
         },
     ]
 }
@@ -347,6 +351,7 @@ macro_rules! DetectorTest {
     }};
 }
 
+/*
 fn plot_thing(regressions: Vec<LogRegressResults>, snrs: &[f64]) {
     Python::with_gil(|py| {
         let cycler = py.import_bound("cycler").unwrap();
@@ -397,13 +402,14 @@ fn plot_thing(regressions: Vec<LogRegressResults>, snrs: &[f64]) {
         }
     });
 }
+*/
 
 #[test]
 fn main() {
     // let snrs_db: Vec<f64> = linspace(-10f64, 12f64, 50).collect();
     // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
     // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 15).collect();
-    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 125).collect();
+    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 150).collect();
 
     let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
 
@@ -417,6 +423,9 @@ fn main() {
     let harness = [
         // PSK
         DetectorTest!("BPSK", tx_bpsk_signal, snrs),
+        DetectorTest!("BPSK-16", |m| tx_bpsk_signal(m).inflate(16), snrs),
+        DetectorTest!("BPSK-32", |m| tx_bpsk_signal(m).inflate(32), snrs),
+        DetectorTest!("BPSK-64", |m| tx_bpsk_signal(m).inflate(64), snrs),
         DetectorTest!("QPSK", tx_qpsk_signal, snrs),
         // CDMA
         DetectorTest!("CDMA-BPSK-16", |m| tx_cdma_bpsk_signal(m, key_16), snrs),
@@ -431,16 +440,48 @@ fn main() {
         DetectorTest!("64QAM", |m| tx_qam_signal(m, 64), snrs),
         DetectorTest!("1024QAM", |m| tx_qam_signal(m, 1024), snrs),
         // BFSK
-        DetectorTest!("BFSK", |m| tx_bfsk_signal(m, 16), snrs),
+        DetectorTest!("BFSK-16", |m| tx_bfsk_signal(m, 16), snrs),
+        DetectorTest!("BFSK-32", |m| tx_bfsk_signal(m, 32), snrs),
+        DetectorTest!("BFSK-64", |m| tx_bfsk_signal(m, 64), snrs),
         // OFDM
         DetectorTest!(
-            "OFDM-BPSK",
+            "OFDM-BPSK-2-16",
             |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 14),
             snrs
         ),
         DetectorTest!(
-            "OFDM-QPSK",
+            "OFDM-QPSK-2-16",
             |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 14),
+            snrs
+        ),
+        DetectorTest!(
+            "OFDM-BPSK-8-16",
+            |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 8),
+            snrs
+        ),
+        DetectorTest!(
+            "OFDM-QPSK-8-16",
+            |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 8),
+            snrs
+        ),
+        DetectorTest!(
+            "OFDM-BPSK-2-64",
+            |m| tx_ofdm_signal(tx_bpsk_signal(m), 64, 62),
+            snrs
+        ),
+        DetectorTest!(
+            "OFDM-QPSK-2-64",
+            |m| tx_ofdm_signal(tx_qpsk_signal(m), 64, 62),
+            snrs
+        ),
+        DetectorTest!(
+            "OFDM-BPSK-32-64",
+            |m| tx_ofdm_signal(tx_bpsk_signal(m), 64, 32),
+            snrs
+        ),
+        DetectorTest!(
+            "OFDM-QPSK-32-64",
+            |m| tx_ofdm_signal(tx_qpsk_signal(m), 64, 32),
             snrs
         ),
         // Chirp Spread Spectrum
@@ -468,6 +509,7 @@ fn main() {
         writer.flush().unwrap();
     }
 
+    /*
     let regressions: Vec<ModulationLogRegressResults> = results
         .iter()
         .map(|test_results| {
@@ -503,4 +545,5 @@ fn main() {
         };
         // plot_thing(log_regresses, &snrs);
     }
+        */
 }

@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 mod util;
 
 use bazbandilo::{
-    awgn,
+    awgn, bit_to_nrz,
     cdma::{rx_cdma_bpsk_signal, rx_cdma_qpsk_signal, tx_cdma_bpsk_signal, tx_cdma_qpsk_signal},
     csk::{rx_csk_signal, tx_csk_signal},
     css::{rx_css_signal, tx_css_signal},
@@ -25,6 +25,7 @@ use bazbandilo::{
     fh_ofdm_dcsk::{rx_fh_ofdm_dcsk_signal, tx_fh_ofdm_dcsk_signal},
     fsk::{rx_bfsk_signal, tx_bfsk_signal},
     hadamard::HadamardMatrix,
+    iter::Iter,
     linspace,
     ofdm::{rx_ofdm_signal, tx_ofdm_signal},
     psk::{rx_bpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_qpsk_signal},
@@ -64,7 +65,8 @@ impl<'a> BitErrorTest<'a> {
 
 const NUM_ERRORS: usize = 100_000;
 // const NUM_ERRORS: usize = 100;
-const BER_CUTOFF: f64 = 10e-4;
+// const BER_CUTOFF: f64 = 10e-4;
+const BER_CUTOFF: f64 = 10e-5;
 
 macro_rules! BitErrorTest {
     ($name:expr, $tx_fn:expr, $rx_fn:expr, $snrs:expr) => {{
@@ -135,6 +137,14 @@ macro_rules! BitErrorTest {
     }};
 }
 
+macro_rules! rx_inflated {
+    ($rx:expr, $signal:expr, $chunks:expr) => {{
+        $rx($signal)
+            .chunks($chunks)
+            .map(|r_i| r_i.into_iter().map(bit_to_nrz).sum::<f64>() > 0f64)
+    }};
+}
+
 #[test]
 fn main() {
     // let snrs_db: Vec<f64> = linspace(-25f64, 10f64, 35).collect();
@@ -156,6 +166,24 @@ fn main() {
     let bers = [
         // PSK
         BitErrorTest!("BPSK", tx_bpsk_signal, rx_bpsk_signal, snrs),
+        BitErrorTest!(
+            "BPSK-16",
+            |m| tx_bpsk_signal(m).inflate(16),
+            |s| rx_inflated!(rx_bpsk_signal, s, 16),
+            snrs
+        ),
+        BitErrorTest!(
+            "BPSK-32",
+            |m| tx_bpsk_signal(m).inflate(32),
+            |s| rx_inflated!(rx_bpsk_signal, s, 32),
+            snrs
+        ),
+        BitErrorTest!(
+            "BPSK-64",
+            |m| tx_bpsk_signal(m).inflate(64),
+            |s| rx_inflated!(rx_bpsk_signal, s, 64),
+            snrs
+        ),
         BitErrorTest!("QPSK", tx_qpsk_signal, rx_qpsk_signal, snrs),
         // CDMA
         BitErrorTest!(
@@ -221,22 +249,70 @@ fn main() {
         ),
         // BFSK
         BitErrorTest!(
-            "BFSK",
+            "BFSK-16",
             |m| tx_bfsk_signal(m, 16),
             |s| rx_bfsk_signal(s, 16),
             snrs
         ),
+        BitErrorTest!(
+            "BFSK-32",
+            |m| tx_bfsk_signal(m, 32),
+            |s| rx_bfsk_signal(s, 32),
+            snrs
+        ),
+        BitErrorTest!(
+            "BFSK-64",
+            |m| tx_bfsk_signal(m, 64),
+            |s| rx_bfsk_signal(s, 64),
+            snrs
+        ),
         // OFDM
         BitErrorTest!(
-            "OFDM-BPSK",
+            "OFDM-BPSK-2-16",
             |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 14),
             |s| rx_bpsk_signal(rx_ofdm_signal(s, 16, 14)),
             snrs
         ),
         BitErrorTest!(
-            "OFDM-QPSK",
+            "OFDM-QPSK-2-16",
             |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 14),
             |s| rx_qpsk_signal(rx_ofdm_signal(s, 16, 14)),
+            snrs
+        ),
+        BitErrorTest!(
+            "OFDM-BPSK-8-16",
+            |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 8),
+            |s| rx_bpsk_signal(rx_ofdm_signal(s, 16, 8)),
+            snrs
+        ),
+        BitErrorTest!(
+            "OFDM-QPSK-8-16",
+            |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 8),
+            |s| rx_qpsk_signal(rx_ofdm_signal(s, 16, 8)),
+            snrs
+        ),
+        BitErrorTest!(
+            "OFDM-BPSK-2-64",
+            |m| tx_ofdm_signal(tx_bpsk_signal(m), 64, 62),
+            |s| rx_bpsk_signal(rx_ofdm_signal(s, 64, 62)),
+            snrs
+        ),
+        BitErrorTest!(
+            "OFDM-QPSK-2-64",
+            |m| tx_ofdm_signal(tx_qpsk_signal(m), 64, 62),
+            |s| rx_qpsk_signal(rx_ofdm_signal(s, 64, 62)),
+            snrs
+        ),
+        BitErrorTest!(
+            "OFDM-BPSK-32-64",
+            |m| tx_ofdm_signal(tx_bpsk_signal(m), 64, 32),
+            |s| rx_bpsk_signal(rx_ofdm_signal(s, 64, 32)),
+            snrs
+        ),
+        BitErrorTest!(
+            "OFDM-QPSK-32-64",
+            |m| tx_ofdm_signal(tx_qpsk_signal(m), 64, 32),
+            |s| rx_qpsk_signal(rx_ofdm_signal(s, 64, 32)),
             snrs
         ),
         // Chirp Spread Spectrum
