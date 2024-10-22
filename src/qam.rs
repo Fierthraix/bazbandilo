@@ -1,4 +1,7 @@
-use crate::{is_int, iter::Iter, linspace, Bit};
+use crate::{
+    iq_mod::{rx_iq_constellation, tx_iq_constellation},
+    is_int, linspace, Bit,
+};
 use num_complex::Complex;
 
 fn get_qam_symbols(m: usize) -> Vec<Complex<f64>> {
@@ -15,12 +18,7 @@ pub fn tx_qam_signal<I: Iterator<Item = Bit>>(
     m: usize,
 ) -> impl Iterator<Item = Complex<f64>> {
     let symbols = get_qam_symbols(m);
-    let bits_per_symbol = (m as f64).log2() as usize;
-
-    message.chunks(bits_per_symbol).map(move |chunk| {
-        let idx = chunk.iter().fold(0, |acc, &bit| (acc << 1) | bit as usize);
-        symbols[idx]
-    })
+    tx_iq_constellation(message, m, symbols)
 }
 
 pub fn rx_qam_signal<I: Iterator<Item = Complex<f64>>>(
@@ -28,43 +26,7 @@ pub fn rx_qam_signal<I: Iterator<Item = Complex<f64>>>(
     m: usize,
 ) -> impl Iterator<Item = Bit> {
     let symbols = get_qam_symbols(m);
-    let bits_per_symbol = (m as f64).log2() as usize;
-
-    // This is half the separation between adjacent symbols.
-    let min_distance = (symbols[0] - symbols[1]).norm() / 2f64;
-
-    signal.flat_map(move |received_symbol| {
-        // Find out which symbol was transmitted
-        let idx = {
-            let mut smallest_distance = f64::MAX;
-            let mut best_index = 0;
-
-            // Find the minumum euclidian distance between the symbols.
-            for (index, &symbol) in symbols.iter().enumerate() {
-                let distance = (received_symbol - symbol).norm();
-
-                if distance < min_distance {
-                    // Symbol cannot possibly be closer to any other symbol,
-                    // so we short-circuit here.
-                    best_index = index;
-                    break;
-                } else if distance < smallest_distance {
-                    smallest_distance = distance;
-                    best_index = index;
-                }
-            }
-            best_index
-        };
-
-        // Convert symbol to bits.
-        (0..bits_per_symbol)
-            .rev()
-            .map(move |i| match (idx >> i) & 1 {
-                1 => true,
-                0 => false,
-                _ => unreachable!(),
-            })
-    })
+    rx_iq_constellation(signal, m, symbols)
 }
 
 #[cfg(test)]

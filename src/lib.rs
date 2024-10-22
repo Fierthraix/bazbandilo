@@ -19,6 +19,7 @@ pub mod fh_ofdm_dcsk;
 mod filters;
 pub mod fsk;
 pub mod hadamard;
+mod iq_mod;
 pub mod iter;
 pub mod ofdm;
 pub mod psk;
@@ -36,7 +37,10 @@ use crate::{
     hadamard::HadamardMatrix,
     iter::Iter,
     ofdm::{rx_ofdm_signal, tx_ofdm_signal},
-    psk::{rx_bpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_qpsk_signal},
+    psk::{
+        rx_bpsk_signal, rx_mpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_mpsk_signal,
+        tx_qpsk_signal,
+    },
     qam::{rx_qam_signal, tx_qam_signal},
     ssca::{ssca_base, ssca_mapped},
 };
@@ -457,6 +461,16 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfunction]
+    fn tx_mpsk(message: Vec<Bit>, m: usize) -> Vec<Complex<f64>> {
+        tx_mpsk_signal(message.into_iter(), m).collect()
+    }
+
+    #[pyfunction]
+    fn rx_mpsk(signal: Vec<Complex<f64>>, m: usize) -> Vec<Bit> {
+        rx_mpsk_signal(signal.into_iter(), m).collect()
+    }
+
+    #[pyfunction]
     fn tx_ofdm_qpsk(message: Vec<Bit>, subcarriers: usize, pilots: usize) -> Vec<Complex<f64>> {
         tx_ofdm_signal(tx_qpsk_signal(message.into_iter()), subcarriers, pilots).collect()
     }
@@ -552,6 +566,8 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rx_bpsk, m)?)?;
     m.add_function(wrap_pyfunction!(tx_qpsk, m)?)?;
     m.add_function(wrap_pyfunction!(rx_qpsk, m)?)?;
+    m.add_function(wrap_pyfunction!(tx_mpsk, m)?)?;
+    m.add_function(wrap_pyfunction!(rx_mpsk, m)?)?;
     m.add_function(wrap_pyfunction!(tx_cdma_bpsk, m)?)?;
     m.add_function(wrap_pyfunction!(rx_cdma_bpsk, m)?)?;
     m.add_function(wrap_pyfunction!(tx_cdma_qpsk, m)?)?;
