@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from util import db, timeit
 
+from argparse import ArgumentParser, Namespace
 from cycler import cycler
 import multiprocessing
 import numpy as np
@@ -8,6 +9,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_curve
 import pandas as pd
+import re
 from typing import Dict, List
 
 
@@ -187,8 +189,27 @@ def plot_pd_vs_ber_metric(
         fig.savefig(f"/tmp/covert_metric_{kind}.png")
 
 
+def filter_results(
+    results_object: List[Dict[str, object]], pattern: re.Pattern
+) -> List[Dict[str, object]]:
+    return list(filter(lambda mod: pattern.match(mod["name"]), results_object))
+
+
+def parse_args() -> Namespace:
+    ap = ArgumentParser()
+    ap.add_argument("-b", "--ber-file", default=CWD.parent / "bers_curr.json")
+    ap.add_argument("-p", "--pd-file", default=CWD.parent / "results_curr.json")
+    # ap.add_argument("-b", "--ber-file", default=CWD.parent / "bers_curr.msgpack")
+    # ap.add_argument("-p", "--pd-file", default=CWD.parent / "results_curr.msgpack")
+    ap.add_argument("--bers-only", action="store_true")
+    ap.add_argument("-r", "--regex", default="")
+    ap.add_argument('-s', '--save', action='store_true')
+    return ap.parse_args()
+
+
 if __name__ == "__main__":
     import json
+    # import umsgpack
     import matplotlib.pyplot as plt
     from pathlib import Path
 
@@ -200,31 +221,39 @@ if __name__ == "__main__":
 
     CWD: Path = Path(__file__).parent
 
-    with timeit('Loading Data') as _:
+    args = parse_args()
+
+    regex = re.compile(args.regex)
+
+    with timeit("Loading Data") as _:
         # Load from JSON.
-        results_file: Path = CWD.parent / "results_curr.json"
-        with results_file.open("r") as f:
-            results = json.load(f)
+        if not args.bers_only:
+            with Path(args.pd_file).open("r") as f:
+                results = json.load(f)
+                # results = umsgpack.load(f, raw=True)
+            results = filter_results(results, regex)
 
-        bers_file: Path = CWD.parent / "bers_curr.json"
-        with bers_file.open("r") as f:
+        with Path(args.ber_file).open("r") as f:
             bers = json.load(f)
+            # bers = umsgpack.load(f, raw=True)
+        bers = filter_results(bers, regex)
 
-    # Parse and Log Regress results.
-    # regressed: List[Dict[str, object]] = list(map(parse_results, results))
-    with multiprocessing.Pool() as p, timeit("Logistic Regresstion") as _:
-        regressed: List[Dict[str, object]] = p.map(parse_results, results)
+    if not args.bers_only:
+        # Parse and Log Regress results.
+        # regressed: List[Dict[str, object]] = list(map(parse_results, results))
+        with multiprocessing.Pool() as p, timeit("Logistic Regresstion") as _:
+            regressed: List[Dict[str, object]] = p.map(parse_results, results)
 
-    save = True
-    for detector in DETECTORS:
-        plot_youden_j_with_multiple_modulations(regressed, detector, save=save)
+        for detector in DETECTORS:
+            plot_youden_j_with_multiple_modulations(regressed, detector, save=args.save)
 
-    for modulation in regressed:
-        plot_pd_vs_ber(modulation, bers, save=save)
+        for modulation in regressed:
+            plot_pd_vs_ber(modulation, bers, save=args.save)
 
-    plot_all_bers(bers, save=save)
+    plot_all_bers(bers, save=args.save)
 
-    for detector in DETECTORS:
-        plot_pd_vs_ber_metric(regressed, bers, detector, save=save)
+    if not args.bers_only:
+        for detector in DETECTORS:
+            plot_pd_vs_ber_metric(regressed, bers, detector, save=args.save)
 
     plt.show()
