@@ -426,14 +426,15 @@ fn main() {
         DetectorTest!("BPSK-16", |m| tx_bpsk_signal(m).inflate(16), snrs),
         DetectorTest!("BPSK-32", |m| tx_bpsk_signal(m).inflate(32), snrs),
         DetectorTest!("BPSK-64", |m| tx_bpsk_signal(m).inflate(64), snrs),
-        DetectorTest!("QPSK", tx_qpsk_signal, snrs),
+        // DetectorTest!("QPSK", tx_qpsk_signal, snrs),
         // CDMA
         DetectorTest!("CDMA-BPSK-16", |m| tx_cdma_bpsk_signal(m, key_16), snrs),
-        DetectorTest!("CDMA-QPSK-16", |m| tx_cdma_qpsk_signal(m, key_16), snrs),
+        // DetectorTest!("CDMA-QPSK-16", |m| tx_cdma_qpsk_signal(m, key_16), snrs),
         DetectorTest!("CDMA-BPSK-32", |m| tx_cdma_bpsk_signal(m, key_32), snrs),
-        DetectorTest!("CDMA-QPSK-32", |m| tx_cdma_qpsk_signal(m, key_32), snrs),
+        // DetectorTest!("CDMA-QPSK-32", |m| tx_cdma_qpsk_signal(m, key_32), snrs),
         DetectorTest!("CDMA-BPSK-64", |m| tx_cdma_bpsk_signal(m, key_64), snrs),
-        DetectorTest!("CDMA-QPSK-64", |m| tx_cdma_qpsk_signal(m, key_64), snrs),
+        // DetectorTest!("CDMA-QPSK-64", |m| tx_cdma_qpsk_signal(m, key_64), snrs),
+        /*
         // QAM
         DetectorTest!("4QAM", |m| tx_qam_signal(m, 4), snrs),
         DetectorTest!("16QAM", |m| tx_qam_signal(m, 16), snrs),
@@ -494,6 +495,7 @@ fn main() {
         DetectorTest!("QCSK", tx_qcsk_signal, snrs),
         // FH-OFDM-DCSK
         DetectorTest!("FH-OFDM-DCSK", tx_fh_ofdm_dcsk_signal, snrs),
+        */
     ];
 
     let results: Vec<ModulationDetectorResults> = harness
@@ -506,6 +508,18 @@ fn main() {
         let file = File::create("/tmp/results.json").unwrap();
         let mut writer = BufWriter::new(file);
         serde_json::to_writer(&mut writer, &results).unwrap();
+
+        writer.flush().unwrap();
+    }
+
+    {
+        let file = File::create("/tmp/results.msgpack").unwrap();
+        let mut writer = BufWriter::new(file);
+        writer
+            .write_all(&rmp_serde::to_vec(&results).unwrap())
+            // .write_all(&rmp_serde::to_vec_named(&results).unwrap())
+            .unwrap();
+
         writer.flush().unwrap();
     }
 

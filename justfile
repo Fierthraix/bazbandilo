@@ -57,6 +57,8 @@ test arg:
 run:
 	# @just ber
 	# cp /tmp/bers.json bers_curr.json
+	# cp /tmp/bers.msgpack bers_curr.msgpack
 	@just pd
 	cp /tmp/results.json results_curr.json
+	cp /tmp/results.msgpack results_curr.msgpack
 	@just i ./pitono/foo.py

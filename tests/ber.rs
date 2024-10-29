@@ -65,8 +65,8 @@ impl<'a> BitErrorTest<'a> {
 
 const NUM_ERRORS: usize = 100_000;
 // const NUM_ERRORS: usize = 100;
-// const BER_CUTOFF: f64 = 10e-4;
-const BER_CUTOFF: f64 = 10e-5;
+const BER_CUTOFF: f64 = 10e-4;
+// const BER_CUTOFF: f64 = 10e-5;
 
 macro_rules! BitErrorTest {
     ($name:expr, $tx_fn:expr, $rx_fn:expr, $snrs:expr) => {{
@@ -145,6 +145,17 @@ macro_rules! rx_inflated {
     }};
 }
 
+fn rx_inflated_bpsk_signal<I: Iterator<Item = Complex<f64>>>(
+    signal: I,
+    chunks: usize,
+) -> impl Iterator<Item = Bit> {
+    rx_bpsk_signal(
+        signal
+            .chunks(chunks)
+            .map(|chunk| chunk.iter().sum::<Complex<f64>>() / chunk.len() as f64),
+    )
+}
+
 #[test]
 fn main() {
     // let snrs_db: Vec<f64> = linspace(-25f64, 10f64, 35).collect();
@@ -169,33 +180,45 @@ fn main() {
         BitErrorTest!(
             "BPSK-16",
             |m| tx_bpsk_signal(m).inflate(16),
-            |s| rx_inflated!(rx_bpsk_signal, s, 16),
+            |s| rx_inflated_bpsk_signal(s, 16),
             snrs
         ),
         BitErrorTest!(
             "BPSK-32",
             |m| tx_bpsk_signal(m).inflate(32),
-            |s| rx_inflated!(rx_bpsk_signal, s, 32),
+            |s| rx_inflated_bpsk_signal(s, 32),
             snrs
         ),
         BitErrorTest!(
             "BPSK-64",
             |m| tx_bpsk_signal(m).inflate(64),
+            |s| rx_inflated_bpsk_signal(s, 64),
+            snrs
+        ),
+        BitErrorTest!(
+            "BPSK-16-AVG",
+            |m| tx_bpsk_signal(m).inflate(16),
+            |s| rx_inflated!(rx_bpsk_signal, s, 16),
+            snrs
+        ),
+        BitErrorTest!(
+            "BPSK-32-AVG",
+            |m| tx_bpsk_signal(m).inflate(32),
+            |s| rx_inflated!(rx_bpsk_signal, s, 32),
+            snrs
+        ),
+        BitErrorTest!(
+            "BPSK-64-AVG",
+            |m| tx_bpsk_signal(m).inflate(64),
             |s| rx_inflated!(rx_bpsk_signal, s, 64),
             snrs
         ),
-        BitErrorTest!("QPSK", tx_qpsk_signal, rx_qpsk_signal, snrs),
+        // BitErrorTest!("QPSK", tx_qpsk_signal, rx_qpsk_signal, snrs),
         // CDMA
         BitErrorTest!(
             "CDMA-BPSK-16",
             |m| tx_cdma_bpsk_signal(m, key_16),
             |s| rx_cdma_bpsk_signal(s, key_16),
-            snrs
-        ),
-        BitErrorTest!(
-            "CDMA-QPSK-16",
-            |m| tx_cdma_qpsk_signal(m, key_16),
-            |s| rx_cdma_qpsk_signal(s, key_16),
             snrs
         ),
         BitErrorTest!(
@@ -205,15 +228,22 @@ fn main() {
             snrs
         ),
         BitErrorTest!(
-            "CDMA-QPSK-32",
-            |m| tx_cdma_qpsk_signal(m, key_32),
-            |s| rx_cdma_qpsk_signal(s, key_32),
-            snrs
-        ),
-        BitErrorTest!(
             "CDMA-BPSK-64",
             |m| tx_cdma_bpsk_signal(m, key_64),
             |s| rx_cdma_bpsk_signal(s, key_64),
+            snrs
+        ),
+        /*
+        BitErrorTest!(
+            "CDMA-QPSK-16",
+            |m| tx_cdma_qpsk_signal(m, key_16),
+            |s| rx_cdma_qpsk_signal(s, key_16),
+            snrs
+        ),
+        BitErrorTest!(
+            "CDMA-QPSK-32",
+            |m| tx_cdma_qpsk_signal(m, key_32),
+            |s| rx_cdma_qpsk_signal(s, key_32),
             snrs
         ),
         BitErrorTest!(
@@ -345,6 +375,7 @@ fn main() {
             rx_fh_ofdm_dcsk_signal,
             snrs
         ),
+        */
     ];
 
     let bers: Vec<BitErrorResults> = bers.into_iter().map(|test| test.calc_bers()).collect();
@@ -361,6 +392,17 @@ fn main() {
         let file = File::create("/tmp/bers.json").unwrap();
         let mut writer = BufWriter::new(file);
         serde_json::to_writer(&mut writer, &bers).unwrap();
+        writer.flush().unwrap();
+    }
+
+    {
+        // Save the results to a MessagePack file.
+        let file = File::create("/tmp/bers.msgpack").unwrap();
+        let mut writer = BufWriter::new(file);
+        writer
+            // .write_all(&rmp_serde::to_vec_named(&bers).unwrap())
+            .write_all(&rmp_serde::to_vec(&bers).unwrap())
+            .unwrap();
         writer.flush().unwrap();
     }
 
