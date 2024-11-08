@@ -151,7 +151,7 @@ pub fn bit_to_nrz(bit: Bit) -> f64 {
     }
 }
 
-fn fftshift<T: Clone>(x: &[T]) -> Vec<T> {
+pub fn fftshift<T: Clone>(x: &[T]) -> Vec<T> {
     let mut v = Vec::with_capacity(x.len());
     let pivot = x.len().div_ceil(2);
     v.extend_from_slice(&x[pivot..]);
