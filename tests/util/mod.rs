@@ -4,6 +4,42 @@ use pyo3::types::IntoPyDict;
 
 pub mod ber;
 
+macro_rules! energy_samples_bits {
+    ($tx_fn:expr, $min_samples:expr) => {{
+        let mut rng = rand::thread_rng();
+
+        let mut num_bits: usize = $min_samples;
+
+        // Create transmit signal.
+        let mut tx_signal: Vec<Complex<f64>> =
+            $tx_fn((0..num_bits).map(|_| rng.gen::<Bit>())).collect();
+
+        while tx_signal.len() < $min_samples {
+            let ratio: usize = (num_bits as f64 / tx_signal.len() as f64).ceil() as usize;
+            let new_bits: usize = (ratio - 1) * num_bits;
+            num_bits += new_bits;
+            tx_signal.extend($tx_fn((0..new_bits).map(|_| rng.gen::<Bit>())));
+        }
+        let energy_signal: f64 = tx_signal.iter().map(|&s_i| s_i.norm_sqr()).sum();
+
+        (energy_signal, tx_signal.len(), num_bits)
+    }};
+}
+
+macro_rules! eb {
+    ($tx_fn:expr, $rx_fn:expr, $num_bits:expr) => {{
+        let num_bits = 65536;
+
+        let data = random_data($num_bits);
+        let tx_signal: Vec<Complex<f64>> = $tx_fn(data.iter().cloned()).collect();
+
+        let energy: f64 = tx_signal.iter().map(|&s_i| s_i.norm_sqr()).sum();
+        let num_bits_received: usize = $rx_fn(tx_signal.iter().cloned()).fold(0, |acc, _| acc + 1);
+
+        energy / num_bits_received as f64
+    }};
+}
+
 macro_rules! init_matplotlib {
     ($py: expr) => {{
         let matplotlib = $py.import_bound("matplotlib").unwrap();

@@ -63,8 +63,10 @@ impl<'a> BitErrorTest<'a> {
     }
 }
 
-const NUM_ERRORS: usize = 100_000;
-// const NUM_ERRORS: usize = 100;
+const NUM_SAMPLES: usize = 65536;
+const NUM_BITS: usize = 65536;
+// const NUM_ERRORS: usize = 100_000;
+const NUM_ERRORS: usize = 100;
 const BER_CUTOFF: f64 = 10e-4;
 // const BER_CUTOFF: f64 = 10e-5;
 
@@ -74,25 +76,20 @@ macro_rules! BitErrorTest {
             name: String::from($name),
             snrs: $snrs.clone(),
             calc_ber_fn: &|snrs: &[f64]| {
-                let eb = {
-                    let num_bits = 65536;
-
-                    let data = random_data(num_bits);
-                    let tx_signal: Vec<Complex<f64>> = $tx_fn(data.iter().cloned()).collect();
-
-                    let energy: f64 = tx_signal.iter().map(|&s_i| s_i.norm_sqr()).sum();
-                    let num_bits_received: usize =
-                        $rx_fn(tx_signal.iter().cloned()).fold(0, |acc, _| acc + 1);
-
-                    energy / num_bits_received as f64
-                };
-
+                // Create a progress bar.
                 let mut pb = par_tqdm!(total = $snrs.len());
                 pb.refresh().unwrap();
                 pb.set_description($name);
                 let pb = Mutex::new(pb);
 
+                // let (energy_signal, num_samples, num_bits) =
+                //     energy_samples_bits!(NUM_SAMPLES, $tx_fn);
+                let eb = eb!($tx_fn, $rx_fn, NUM_BITS);
+
                 let mut bers: Vec<f64> = Vec::with_capacity(snrs.len());
+                // let n0s = snrs
+                //     .iter()
+                // .map(|snr| (energy_signal / (2f64 * num_samples as f64 * snr)).sqrt());
                 let n0s = snrs.iter().map(|snr| (eb / (2f64 * snr)).sqrt());
 
                 for n0 in n0s {
@@ -101,12 +98,11 @@ macro_rules! BitErrorTest {
                     let mut curr_ber = 0.5;
 
                     while errors < NUM_ERRORS && curr_ber >= BER_CUTOFF {
-                        let num_bits = 9088;
                         let parallel = num_cpus::get();
                         errors += (0..parallel)
                             .into_par_iter()
                             .map(|_| {
-                                let data = random_data(num_bits);
+                                let data = random_data(NUM_BITS);
                                 let tx_signal = $tx_fn(data.iter().cloned());
                                 let rx_signal = $rx_fn(awgn(tx_signal, n0));
 
@@ -117,7 +113,7 @@ macro_rules! BitErrorTest {
                             })
                             .sum::<usize>();
 
-                        num_total_bits += parallel * num_bits;
+                        num_total_bits += parallel * NUM_BITS;
                         curr_ber = errors as f64 / num_total_bits as f64;
                     }
 
@@ -213,7 +209,7 @@ fn main() {
             |s| rx_inflated!(rx_bpsk_signal, s, 64),
             snrs
         ),
-        // BitErrorTest!("QPSK", tx_qpsk_signal, rx_qpsk_signal, snrs),
+        BitErrorTest!("QPSK", tx_qpsk_signal, rx_qpsk_signal, snrs),
         // CDMA
         BitErrorTest!(
             "CDMA-BPSK-16",
@@ -233,7 +229,6 @@ fn main() {
             |s| rx_cdma_bpsk_signal(s, key_64),
             snrs
         ),
-        /*
         BitErrorTest!(
             "CDMA-QPSK-16",
             |m| tx_cdma_qpsk_signal(m, key_16),
@@ -375,7 +370,6 @@ fn main() {
             rx_fh_ofdm_dcsk_signal,
             snrs
         ),
-        */
     ];
 
     let bers: Vec<BitErrorResults> = bers.into_iter().map(|test| test.calc_bers()).collect();
@@ -406,7 +400,6 @@ fn main() {
         writer.flush().unwrap();
     }
 
-    /*
     Python::with_gil(|py| {
         let matplotlib = py.import_bound("matplotlib").unwrap();
         let plt = py.import_bound("matplotlib.pyplot").unwrap();
@@ -447,10 +440,9 @@ fn main() {
             "axes.set_yscale('log')",
             "axes.set_xlabel('SNR (dB)')",
             "axes.set_ylabel('BER')",
-            "plt.show()",
+            // "plt.show()",
         ] {
             py.eval_bound(line, None, Some(&locals)).unwrap();
         }
     });
-    */
 }

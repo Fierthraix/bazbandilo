@@ -4,8 +4,7 @@ use std::sync::Mutex;
 
 use convert_case::{Case, Casing};
 use kdam::{par_tqdm, BarExt};
-use num::traits::float::FloatCore;
-use num::{Float, Zero};
+use num::Zero;
 use num_complex::Complex;
 use numpy::ndarray::{Array2, Axis};
 use pyo3::prelude::*;
@@ -61,6 +60,9 @@ fn max_cut_detect(sxf: &Array2<Complex<f64>>) -> f64 {
 }
 
 fn energy_detect(signal: &[Complex<f64>]) -> f64 {
+    // Σ |s_i|^2
+    // 1/len(s) * Σ |s_i|^2
+    // 10 log10( Σ |s_i|^2 )
     10f64 * (signal.iter().map(|&s_i| s_i.norm_sqr()).sum::<f64>()).log10()
 }
 
@@ -85,9 +87,12 @@ impl Detector {
 }
 
 fn run_detectors<I: Iterator<Item = Complex<f64>>>(signal: I) -> Vec<DetectorOutput> {
-    let np = 64;
-    let n = 4096;
+    let np = 128;
+    // let np = 256;
+    let n = 8192;
+    // let n = 32768;
     let chan_signal: Vec<Complex<f64>> = signal.take(n + np).collect();
+    // let chan_signal: Vec<Complex<f64>> = signal.collect();
     let sxf = ssca_base(&chan_signal, n, np);
     let sxf_mapped = ssca_mapper(&sxf);
 
@@ -263,9 +268,11 @@ fn remap_results(λs: &[Vec<Vec<DetectorOutput>>], kind: &str) -> Vec<Vec<f64>> 
     λs
 }
 
-const NUM_BITS: usize = 65536;
-const NUM_ATTEMPTS: usize = 1000;
-// const NUM_ATTEMPTS: usize = 250;
+const NUM_SAMPLES: usize = 65536;
+
+// const NUM_ATTEMPTS: usize = 1000;
+// const NUM_ATTEMPTS: usize = 500;
+const NUM_ATTEMPTS: usize = 250;
 // const NUM_ATTEMPTS: usize = 75;
 // const NUM_ATTEMPTS: usize = 20;
 
@@ -274,17 +281,6 @@ macro_rules! DetectorTest {
         DetectorTest {
             snrs: $snrs.clone(),
             run_fn: &|snrs: &[f64]| {
-                // Calculate the Bit-Energy.
-                let (eb, num_samps) = {
-                    let mut rng = rand::thread_rng();
-                    let data = (0..NUM_BITS).map(|_| rng.gen::<Bit>());
-                    let tx_signal: Vec<Complex<f64>> = $tx_fn(data).collect();
-
-                    let energy: f64 = tx_signal.iter().map(|&s_i| s_i.norm_sqr()).sum();
-
-                    (energy / NUM_BITS as f64, tx_signal.len())
-                };
-
                 // Make a Progress Bar.
                 let pb = {
                     let mut pb = par_tqdm!(total = $snrs.len());
@@ -293,21 +289,25 @@ macro_rules! DetectorTest {
                     Mutex::new(pb)
                 };
 
+                // Calculate the signal energy.
+                let (energy_signal, num_samples, num_bits) =
+                    energy_samples_bits!($tx_fn, NUM_SAMPLES);
+
                 // Calculate the detector outputs for the modulation.
                 let (unmapped_h0_λs, unmapped_h1_λs): (
                     Vec<Vec<Vec<DetectorOutput>>>,
                     Vec<Vec<Vec<DetectorOutput>>>,
                 ) = snrs
                     .par_iter()
-                    .map(|&snr| {
+                    // Calculate the noise variance.
+                    .map(|&snr| (energy_signal / (2f64 * num_samples as f64 * snr)).sqrt())
+                    .map(|n0| {
                         // Generate signals.
-                        let n0: f64 = (eb / (2f64 * snr)).sqrt();
-
                         let h0_λs: Vec<Vec<DetectorOutput>> = (0..NUM_ATTEMPTS)
                             .into_par_iter()
                             .map(|_| {
                                 let noisy_signal =
-                                    awgn((0..num_samps).map(|_| Complex::zero()), n0);
+                                    awgn((0..num_samples).map(|_| Complex::zero()), n0);
                                 run_detectors(noisy_signal)
                             })
                             .collect();
@@ -316,7 +316,7 @@ macro_rules! DetectorTest {
                             .into_par_iter()
                             .map(|_| {
                                 let mut rng = rand::thread_rng();
-                                let data = (0..NUM_BITS).map(|_| rng.gen::<Bit>());
+                                let data = (0..num_bits).map(|_| rng.gen::<Bit>());
 
                                 run_detectors(awgn($tx_fn(data), n0))
                             })
@@ -351,7 +351,6 @@ macro_rules! DetectorTest {
     }};
 }
 
-/*
 fn plot_thing(regressions: Vec<LogRegressResults>, snrs: &[f64]) {
     Python::with_gil(|py| {
         let cycler = py.import_bound("cycler").unwrap();
@@ -369,6 +368,12 @@ fn plot_thing(regressions: Vec<LogRegressResults>, snrs: &[f64]) {
             .unwrap()
             .extract()
             .unwrap();
+        // let (fig, axes): (&PyObject, &PyObject) = py
+        // let x: &PyAny = py
+        //     .eval_bound("plt.subplots(1)", None, Some(&locals))
+        //     .unwrap()
+        //     .extract()
+        //     .unwrap();
         locals.set_item("fig", fig).unwrap();
         locals.set_item("axes", axes).unwrap();
 
@@ -402,14 +407,14 @@ fn plot_thing(regressions: Vec<LogRegressResults>, snrs: &[f64]) {
         }
     });
 }
-*/
 
 #[test]
 fn main() {
     // let snrs_db: Vec<f64> = linspace(-10f64, 12f64, 50).collect();
     // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
     // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 15).collect();
-    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 150).collect();
+    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 50).collect();
+    // let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 150).collect();
 
     let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
 
@@ -429,12 +434,11 @@ fn main() {
         // DetectorTest!("QPSK", tx_qpsk_signal, snrs),
         // CDMA
         DetectorTest!("CDMA-BPSK-16", |m| tx_cdma_bpsk_signal(m, key_16), snrs),
-        // DetectorTest!("CDMA-QPSK-16", |m| tx_cdma_qpsk_signal(m, key_16), snrs),
+        DetectorTest!("CDMA-QPSK-16", |m| tx_cdma_qpsk_signal(m, key_16), snrs),
         DetectorTest!("CDMA-BPSK-32", |m| tx_cdma_bpsk_signal(m, key_32), snrs),
-        // DetectorTest!("CDMA-QPSK-32", |m| tx_cdma_qpsk_signal(m, key_32), snrs),
+        DetectorTest!("CDMA-QPSK-32", |m| tx_cdma_qpsk_signal(m, key_32), snrs),
         DetectorTest!("CDMA-BPSK-64", |m| tx_cdma_bpsk_signal(m, key_64), snrs),
-        // DetectorTest!("CDMA-QPSK-64", |m| tx_cdma_qpsk_signal(m, key_64), snrs),
-        /*
+        DetectorTest!("CDMA-QPSK-64", |m| tx_cdma_qpsk_signal(m, key_64), snrs),
         // QAM
         DetectorTest!("4QAM", |m| tx_qam_signal(m, 4), snrs),
         DetectorTest!("16QAM", |m| tx_qam_signal(m, 16), snrs),
@@ -495,7 +499,6 @@ fn main() {
         DetectorTest!("QCSK", tx_qcsk_signal, snrs),
         // FH-OFDM-DCSK
         DetectorTest!("FH-OFDM-DCSK", tx_fh_ofdm_dcsk_signal, snrs),
-        */
     ];
 
     let results: Vec<ModulationDetectorResults> = harness
@@ -505,22 +508,25 @@ fn main() {
 
     // Save results to file.
     {
-        let file = File::create("/tmp/results.json").unwrap();
+        let name = "/tmp/results.json";
+        let file = File::create(name).unwrap();
         let mut writer = BufWriter::new(file);
         serde_json::to_writer(&mut writer, &results).unwrap();
 
         writer.flush().unwrap();
+        println!("Saved {}", name);
     }
 
     {
-        let file = File::create("/tmp/results.msgpack").unwrap();
+        let name = "/tmp/results.msgpack";
+        let file = File::create(name).unwrap();
         let mut writer = BufWriter::new(file);
         writer
             .write_all(&rmp_serde::to_vec(&results).unwrap())
-            // .write_all(&rmp_serde::to_vec_named(&results).unwrap())
             .unwrap();
 
         writer.flush().unwrap();
+        println!("Saved {}", name);
     }
 
     /*

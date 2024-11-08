@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 from util import db, timeit
+from ber import ber_bpsk
 
 from argparse import ArgumentParser, Namespace
+import concurrent.futures
 from cycler import cycler
-import multiprocessing
+from functools import partial
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
@@ -22,10 +24,11 @@ def log_regress(
         x_var, y_var, test_size=0.5, random_state=0
     )
 
-    log_regression = LogisticRegression()
+    log_regression = LogisticRegression(solver="liblinear")
     log_regression.fit(x_train, y_train)
 
     y_pred_proba = log_regression.predict_proba(x_test)[::, 1]
+    # y_pred_proba = log_regression.decision_function(x_test)
     fpr, tpr, thresholds = roc_curve(y_test, y_pred_proba, drop_intermediate=False)
 
     df = pd.DataFrame(
@@ -41,8 +44,12 @@ def log_regress(
     df.sort_values(by="proba", inplace=True)
     if len(tpr) == len(h0_λs):
         df["tpr"] = tpr[::-1]
-    else:
+    elif len(tpr) == len(h0_λs) + 1:
         df["tpr"] = tpr[1:][::-1]
+    else:
+        print("New Case!")
+        # assert False
+
     if len(fpr) == len(h0_λs):
         df["fpr"] = fpr[::-1]
     else:
@@ -62,14 +69,19 @@ CYCLES: cycler = cycler(color=["r", "g", "b", "c", "m", "y"]) * cycler(
         (0, (3, 5, 1, 5)),
     ]
 )
+# CYCLES = None
 
 
 def plot_youden_j_with_multiple_modulations(
-    modulation_test_results: List[Dict[str, object]], kind: str, save=False
+    modulation_test_results: List[Dict[str, object]],
+    kind: str,
+    save=False,
+    title: str = "",
 ):
     fig, ax = plt.subplots()
 
-    # ax.set_prop_cycle(CYCLES)
+    if CYCLES:
+        ax.set_prop_cycle(CYCLES)
     for modulation in modulation_test_results:
         snrs = modulation["snrs"]
         youden_js: List[float] = modulation[kind]["youden_js"]
@@ -78,7 +90,10 @@ def plot_youden_j_with_multiple_modulations(
     ax.set_xlabel("SNR (db)")
     ax.set_ylabel("Youden J")
     ax.legend(loc="best")
-    fig.suptitle(kind)
+    if title:
+        fig.suptitle(f"{kind} - {title}")
+    else:
+        fig.suptitle(kind)
     if save:
         fig.set_size_inches(16, 9)
         fig.savefig(f"/tmp/Youden-J_{kind}_multiple_modulations.png")
@@ -124,7 +139,9 @@ def plot_pd_vs_ber(
         fig.savefig(f'/tmp/ber_{modulation["name"]}.png')
 
 
-def parse_results(modulation: Dict[str, object]) -> Dict[str, object]:
+def parse_results(
+    modulation: Dict[str, object], num_regressions: int = 1
+) -> Dict[str, object]:
     mod_res = {
         "name": modulation["name"],
         "snrs": modulation["snrs"],
@@ -139,11 +156,18 @@ def parse_results(modulation: Dict[str, object]) -> Dict[str, object]:
         dfs = []
         for h0_λ, h1_λ in zip(dx["h0_λs"], dx["h1_λs"]):
             try:
-                df = log_regress(h0_λ, h1_λ)
+                these_dfs = [log_regress(h0_λ, h1_λ) for _ in range(num_regressions)]
+                # df = log_regress(h0_λ, h1_λ)
+                df = these_dfs[0].copy()
+                if num_regressions > 1:
+                    for df_i in these_dfs[1:]:
+                        df += df_i
+                    df /= num_regressions
                 youden_js.append(max(abs(df["youden_j"])))
                 dfs.append(df)
-            except ValueError:
+            except ValueError as err:
                 # youden_js.append(float('nan'))
+                # import pdb; pdb.set_trace()
                 dfs.append(
                     pd.DataFrame(columns=["x", "y", "proba", "tpr", "fpr", "youden_j"])
                 )
@@ -156,7 +180,8 @@ def parse_results(modulation: Dict[str, object]) -> Dict[str, object]:
 
 def plot_all_bers(bers: List[Dict[str, object]], save=False):
     fig, ax = plt.subplots(1)
-    # ax.set_prop_cycle(CYCLES)
+    if CYCLES:
+        ax.set_prop_cycle(CYCLES)
     for ber in bers:
         ax.plot(db(ber["snrs"]), ber["bers"], label=ber["name"])
     ax.legend(loc="best")
@@ -164,6 +189,14 @@ def plot_all_bers(bers: List[Dict[str, object]], save=False):
     ax.set_xlabel("SNR (dB)")
     ax.set_ylabel("BER")
     ax.set_title("BER vs SNR (All Modulations)")
+
+    ax.plot(
+        db(ber["snrs"]),
+        ber_bpsk(ber["snrs"]),
+        color="Blue",
+        ls="--",
+        label="BPSK (Theoretical)",
+    )
     if save:
         fig.set_size_inches(16, 9)
         fig.savefig("/tmp/bers_multiple_modulations.png")
@@ -176,7 +209,8 @@ def plot_pd_vs_ber_metric(
     save=False,
 ):
     fig, ax = plt.subplots()
-    # ax.set_prop_cycle(CYCLES)
+    if CYCLES:
+        ax.set_prop_cycle(CYCLES)
     for modulation in modulation_test_results:
         try:
             mod_ber = next(b for b in bers if b["name"] == modulation["name"])
@@ -203,7 +237,8 @@ def plot_pd_vs_pfa(
     save=False,
 ):
     fig, ax = plt.subplots()
-    # ax.set_prop_cycle(CYCLES)
+    if CYCLES:
+        ax.set_prop_cycle(CYCLES)
     for modulation in results_object:
         p = modulation[kind]["df"]
         mid = len(p) // 2
@@ -225,7 +260,8 @@ def plot_λ_vs_snr(
     results_object: List[Dict[str, object]], kind: str, save: bool = False
 ):
     fig, ax = plt.subplots()
-    # ax.set_prop_cycle(CYCLES)
+    if CYCLES:
+        ax.set_prop_cycle(CYCLES)
     for modulation in results_object:
         p = modulation[kind]["df"]
         λ0s = []
@@ -253,13 +289,16 @@ def filter_results(
 
 def parse_args() -> Namespace:
     ap = ArgumentParser()
-    ap.add_argument("-b", "--ber-file", default=CWD.parent / "bers_curr.json")
-    ap.add_argument("-p", "--pd-file", default=CWD.parent / "results_curr.json")
-    # ap.add_argument("-b", "--ber-file", default=CWD.parent / "bers_curr.msgpack")
-    # ap.add_argument("-p", "--pd-file", default=CWD.parent / "results_curr.msgpack")
-    ap.add_argument("--bers-only", action="store_true")
-    ap.add_argument("-r", "--regex", default="")
+    ap.add_argument(
+        "-b", "--ber-file", default=CWD.parent / "bers_curr.json", type=Path
+    )
+    ap.add_argument(
+        "-p", "--pd-file", default=CWD.parent / "results_curr.json", type=Path
+    )
+    ap.add_argument("-l", "--log-regressions", default=1, type=int)
+    ap.add_argument("-r", "--regex", default="", type=str)
     ap.add_argument("-s", "--save", action="store_true")
+    ap.add_argument("--bers-only", action="store_true")
     return ap.parse_args()
 
 
@@ -267,12 +306,6 @@ DETECTORS: List[str] = [
     "Energy",
     "MaxCut",
     "Dcs",
-]
-
-__DETECTORS: List[str] = [
-    "Energy",
-    "EnergyNormal",
-    "EnergyTheory",
 ]
 
 if __name__ == "__main__":
@@ -301,16 +334,20 @@ if __name__ == "__main__":
             # bers = umsgpack.load(f, raw=True)
         bers = filter_results(bers, regex)
 
-    with timeit("Plotting") as _:
-        if not args.bers_only:
-            # Parse and Log Regress results.
-            # regressed: List[Dict[str, object]] = list(map(parse_results, results))
-            with multiprocessing.Pool() as p, timeit("Logistic Regresstion") as _:
-                regressed: List[Dict[str, object]] = p.map(parse_results, results)
+    if not args.bers_only:
+        # Parse and Log Regress results.
+        parse = partial(parse_results, num_regressions=args.log_regressions)
+        # regressed: List[Dict[str, object]] = list(map(parse, results))
+        with concurrent.futures.ProcessPoolExecutor() as p, timeit(
+            "Logistic Regresstion"
+        ) as _:
+            regressed: List[Dict[str, object]] = list(p.map(parse, results))
+
+        with timeit("Plotting") as _:
 
             for detector in DETECTORS:
                 plot_youden_j_with_multiple_modulations(
-                    regressed, detector, save=args.save
+                    regressed, detector, save=args.save, title=args.pd_file.name
                 )
             for detector in DETECTORS:
                 plot_pd_vs_pfa(regressed, detector, save=args.save)
@@ -321,10 +358,9 @@ if __name__ == "__main__":
             for detector in DETECTORS:
                 plot_λ_vs_snr(regressed, detector, save=args.save)
 
-        plot_all_bers(bers, save=args.save)
 
-        if not args.bers_only:
             for detector in DETECTORS:
                 plot_pd_vs_ber_metric(regressed, bers, detector, save=args.save)
+    plot_all_bers(bers, save=args.save)
 
     plt.show()
