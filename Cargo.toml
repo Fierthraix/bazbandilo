@@ -1,7 +1,7 @@
 [package]
 name = "bazbandilo"
 description = "A chaotic communications simulator."
-version = "0.1.5"
+version = "0.1.6"
 license = "GPL-3.0-or-later"
 edition = "2021"
 homepage = "https://github.com/Fierthraix/bazbandilo"
@@ -37,7 +37,7 @@ extension-module = ["pyo3/extension-module"]
 average = "0.15.1"
 csv = "1.3"
 convert_case = "0.6"
-kdam = {version = "0.5", features = ["rayon"]}
+kdam = {version = "0.6", features = ["rayon"]}
 num_cpus = "1.0"
 rayon = "1.10"
 rstest = "0.23"
