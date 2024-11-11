@@ -59,8 +59,21 @@ def log_regress(
     return df
 
 
-CYCLES: cycler = cycler(color=["r", "g", "b", "c", "m", "y"]) * cycler(
-    linestyle=[
+def get_cycles(num_lines: int) -> cycler:
+    colours: List[str] = [
+        "#1f77b4",
+        "#ff7f0e",
+        "#2ca02c",
+        "#d62728",
+        "#9467bd",
+        "#8c564b",
+        "#e377c2",
+        "#7f7f7f",
+        "#bcbd22",
+        "#17becf",
+    ]
+
+    linestyles: List[str] = [
         "-",
         ":",
         "-.",
@@ -68,8 +81,10 @@ CYCLES: cycler = cycler(color=["r", "g", "b", "c", "m", "y"]) * cycler(
         (0, (3, 1, 1, 1, 1, 1)),
         (0, (3, 5, 1, 5)),
     ]
-)
-# CYCLES = None
+
+    r: int = int(np.ceil(num_lines / 10))
+
+    return cycler(color=colours) * cycler(linestyle=linestyles[:r])
 
 
 def plot_youden_j_with_multiple_modulations(
@@ -80,8 +95,7 @@ def plot_youden_j_with_multiple_modulations(
 ):
     fig, ax = plt.subplots()
 
-    if CYCLES:
-        ax.set_prop_cycle(CYCLES)
+    ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
     for modulation in modulation_test_results:
         snrs = modulation["snrs"]
         youden_js: List[float] = modulation[kind]["youden_js"]
@@ -180,8 +194,7 @@ def parse_results(
 
 def plot_all_bers(bers: List[Dict[str, object]], save=False):
     fig, ax = plt.subplots(1)
-    if CYCLES:
-        ax.set_prop_cycle(CYCLES)
+    ax.set_prop_cycle(get_cycles(len(bers)))
     for ber in bers:
         ax.plot(db(ber["snrs"]), ber["bers"], label=ber["name"])
     ax.legend(loc="best")
@@ -209,8 +222,7 @@ def plot_pd_vs_ber_metric(
     save=False,
 ):
     fig, ax = plt.subplots()
-    if CYCLES:
-        ax.set_prop_cycle(CYCLES)
+    ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
     for modulation in modulation_test_results:
         try:
             mod_ber = next(b for b in bers if b["name"] == modulation["name"])
@@ -237,18 +249,21 @@ def plot_pd_vs_pfa(
     save=False,
 ):
     fig, ax = plt.subplots()
-    if CYCLES:
-        ax.set_prop_cycle(CYCLES)
+    ax.set_prop_cycle(get_cycles(len(results_object)))
     for modulation in results_object:
         p = modulation[kind]["df"]
         mid = len(p) // 2
         x = p[mid]["tpr"]
         y = p[mid]["fpr"]
         snr_db = db(modulation["snrs"][mid])
-        ax.plot(x, y, label=f"{modulation["name"]} - SNR={snr_db}")
+        ax.plot(x, y, label=f"{modulation["name"]}")
     ax.set_xlabel(r"Probability of False Alarm ($\mathcal{P}_D$)")
     ax.set_ylabel(r"Probability of Detection ($\mathcal{P}_D$)")
-    ax.set_title(f"{kind}" + r"Detector - $\mathcal{P}_D$ vs $\mathcal{{P}}_D$")
+    ax.set_title(
+        f"{kind}"
+        + r"Detector - $\mathcal{P}_D$ vs $\mathcal{{P}}_D$ - "
+        + f"SNR={snr_db:.2f}"
+    )
     ax.legend(loc="best")
 
     if save:
@@ -260,8 +275,7 @@ def plot_λ_vs_snr(
     results_object: List[Dict[str, object]], kind: str, save: bool = False
 ):
     fig, ax = plt.subplots()
-    if CYCLES:
-        ax.set_prop_cycle(CYCLES)
+    ax.set_prop_cycle(get_cycles(len(results_object)))
     for modulation in results_object:
         p = modulation[kind]["df"]
         λ0s = []
@@ -278,6 +292,9 @@ def plot_λ_vs_snr(
             λ0s.append(λ0)
 
         ax.plot(db(modulation["snrs"]), λ0s, label=f"{modulation['name']}")
+    ax.set_xlabel("Threshold λ")
+    ax.set_ylabel("SNR (dB)")
+    ax.set_title(f"Threshold vs SNR ({kind})")
     ax.legend(loc="best")
 
 
@@ -357,7 +374,6 @@ if __name__ == "__main__":
 
             for detector in DETECTORS:
                 plot_λ_vs_snr(regressed, detector, save=args.save)
-
 
             for detector in DETECTORS:
                 plot_pd_vs_ber_metric(regressed, bers, detector, save=args.save)
