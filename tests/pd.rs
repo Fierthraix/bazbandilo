@@ -26,7 +26,6 @@ use bazbandilo::{
     fh_ofdm_dcsk::tx_fh_ofdm_dcsk_signal,
     fsk::tx_bfsk_signal,
     hadamard::HadamardMatrix,
-    iter::Iter,
     linspace,
     ofdm::tx_ofdm_signal,
     psk::{tx_bpsk_signal, tx_qpsk_signal},
@@ -270,9 +269,9 @@ fn remap_results(λs: &[Vec<Vec<DetectorOutput>>], kind: &str) -> Vec<Vec<f64>> 
 
 const NUM_SAMPLES: usize = 65536;
 
-// const NUM_ATTEMPTS: usize = 1000;
+const NUM_ATTEMPTS: usize = 1000;
 // const NUM_ATTEMPTS: usize = 500;
-const NUM_ATTEMPTS: usize = 250;
+// const NUM_ATTEMPTS: usize = 250;
 // const NUM_ATTEMPTS: usize = 75;
 // const NUM_ATTEMPTS: usize = 20;
 
@@ -413,8 +412,8 @@ fn main() {
     // let snrs_db: Vec<f64> = linspace(-10f64, 12f64, 50).collect();
     // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
     // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 15).collect();
-    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 50).collect();
-    // let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 150).collect();
+    // let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 50).collect();
+    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 2).collect();
 
     let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
 
@@ -428,19 +427,16 @@ fn main() {
     let harness = [
         // PSK
         DetectorTest!("BPSK", tx_bpsk_signal, snrs),
-        DetectorTest!("BPSK-16", |m| tx_bpsk_signal(m).inflate(16), snrs),
-        DetectorTest!("BPSK-32", |m| tx_bpsk_signal(m).inflate(32), snrs),
-        DetectorTest!("BPSK-64", |m| tx_bpsk_signal(m).inflate(64), snrs),
-        // DetectorTest!("QPSK", tx_qpsk_signal, snrs),
+        DetectorTest!("QPSK", tx_qpsk_signal, snrs),
         // CDMA
         DetectorTest!("CDMA-BPSK-16", |m| tx_cdma_bpsk_signal(m, key_16), snrs),
         DetectorTest!("CDMA-QPSK-16", |m| tx_cdma_qpsk_signal(m, key_16), snrs),
-        DetectorTest!("CDMA-BPSK-32", |m| tx_cdma_bpsk_signal(m, key_32), snrs),
+        // DetectorTest!("CDMA-BPSK-32", |m| tx_cdma_bpsk_signal(m, key_32), snrs),
         DetectorTest!("CDMA-QPSK-32", |m| tx_cdma_qpsk_signal(m, key_32), snrs),
-        DetectorTest!("CDMA-BPSK-64", |m| tx_cdma_bpsk_signal(m, key_64), snrs),
+        // DetectorTest!("CDMA-BPSK-64", |m| tx_cdma_bpsk_signal(m, key_64), snrs),
         DetectorTest!("CDMA-QPSK-64", |m| tx_cdma_qpsk_signal(m, key_64), snrs),
         // QAM
-        DetectorTest!("4QAM", |m| tx_qam_signal(m, 4), snrs),
+        // DetectorTest!("4QAM", |m| tx_qam_signal(m, 4), snrs),
         DetectorTest!("16QAM", |m| tx_qam_signal(m, 16), snrs),
         DetectorTest!("64QAM", |m| tx_qam_signal(m, 64), snrs),
         DetectorTest!("1024QAM", |m| tx_qam_signal(m, 1024), snrs),
@@ -450,49 +446,29 @@ fn main() {
         DetectorTest!("BFSK-64", |m| tx_bfsk_signal(m, 64), snrs),
         // OFDM
         DetectorTest!(
-            "OFDM-BPSK-2-16",
-            |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 14),
+            "OFDM-BPSK-16",
+            |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 0),
             snrs
         ),
         DetectorTest!(
-            "OFDM-QPSK-2-16",
-            |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 14),
+            "OFDM-QPSK-16",
+            |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 0),
             snrs
         ),
         DetectorTest!(
-            "OFDM-BPSK-8-16",
-            |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 8),
+            "OFDM-BPSK-64",
+            |m| tx_ofdm_signal(tx_bpsk_signal(m), 64, 0),
             snrs
         ),
         DetectorTest!(
-            "OFDM-QPSK-8-16",
-            |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 8),
-            snrs
-        ),
-        DetectorTest!(
-            "OFDM-BPSK-2-64",
-            |m| tx_ofdm_signal(tx_bpsk_signal(m), 64, 62),
-            snrs
-        ),
-        DetectorTest!(
-            "OFDM-QPSK-2-64",
-            |m| tx_ofdm_signal(tx_qpsk_signal(m), 64, 62),
-            snrs
-        ),
-        DetectorTest!(
-            "OFDM-BPSK-32-64",
-            |m| tx_ofdm_signal(tx_bpsk_signal(m), 64, 32),
-            snrs
-        ),
-        DetectorTest!(
-            "OFDM-QPSK-32-64",
-            |m| tx_ofdm_signal(tx_qpsk_signal(m), 64, 32),
+            "OFDM-QPSK-64",
+            |m| tx_ofdm_signal(tx_qpsk_signal(m), 64, 0),
             snrs
         ),
         // Chirp Spread Spectrum
         DetectorTest!("CSS-16", |m| tx_css_signal(m, 16), snrs),
+        DetectorTest!("CSS-64", |m| tx_css_signal(m, 64), snrs),
         DetectorTest!("CSS-128", |m| tx_css_signal(m, 128), snrs),
-        DetectorTest!("CSS-512", |m| tx_css_signal(m, 512), snrs),
         // CSK
         DetectorTest!("CSK", tx_csk_signal, snrs),
         DetectorTest!("DCSK", tx_dcsk_signal, snrs),
@@ -512,18 +488,6 @@ fn main() {
         let file = File::create(name).unwrap();
         let mut writer = BufWriter::new(file);
         serde_json::to_writer(&mut writer, &results).unwrap();
-
-        writer.flush().unwrap();
-        println!("Saved {}", name);
-    }
-
-    {
-        let name = "/tmp/results.msgpack";
-        let file = File::create(name).unwrap();
-        let mut writer = BufWriter::new(file);
-        writer
-            .write_all(&rmp_serde::to_vec(&results).unwrap())
-            .unwrap();
 
         writer.flush().unwrap();
         println!("Saved {}", name);

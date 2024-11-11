@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 mod util;
 
 use bazbandilo::{
-    awgn, bit_to_nrz,
+    awgn,
     cdma::{rx_cdma_bpsk_signal, rx_cdma_qpsk_signal, tx_cdma_bpsk_signal, tx_cdma_qpsk_signal},
     csk::{rx_csk_signal, tx_csk_signal},
     css::{rx_css_signal, tx_css_signal},
@@ -63,12 +63,12 @@ impl<'a> BitErrorTest<'a> {
     }
 }
 
-const NUM_SAMPLES: usize = 65536;
+// const NUM_SAMPLES: usize = 65536;
 const NUM_BITS: usize = 65536;
-// const NUM_ERRORS: usize = 100_000;
-const NUM_ERRORS: usize = 100;
-const BER_CUTOFF: f64 = 10e-4;
-// const BER_CUTOFF: f64 = 10e-5;
+const NUM_ERRORS: usize = 100_000;
+// const NUM_ERRORS: usize = 100;
+// const BER_CUTOFF: f64 = 10e-4;
+const BER_CUTOFF: f64 = 10e-5;
 
 macro_rules! BitErrorTest {
     ($name:expr, $tx_fn:expr, $rx_fn:expr, $snrs:expr) => {{
@@ -158,7 +158,7 @@ fn main() {
     // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
     // let snrs_db: Vec<f64> = linspace(-25f64, 12f64, 50).collect();
     // let snrs_db: Vec<f64> = linspace(-25f64, 10f64, 50).collect();
-    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 150).collect();
+    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 2).collect();
     // let snrs_db: Vec<f64> = linspace(0.0, 13f64, 25).collect();
 
     let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
@@ -173,60 +173,12 @@ fn main() {
     let bers = [
         // PSK
         BitErrorTest!("BPSK", tx_bpsk_signal, rx_bpsk_signal, snrs),
-        BitErrorTest!(
-            "BPSK-16",
-            |m| tx_bpsk_signal(m).inflate(16),
-            |s| rx_inflated_bpsk_signal(s, 16),
-            snrs
-        ),
-        BitErrorTest!(
-            "BPSK-32",
-            |m| tx_bpsk_signal(m).inflate(32),
-            |s| rx_inflated_bpsk_signal(s, 32),
-            snrs
-        ),
-        BitErrorTest!(
-            "BPSK-64",
-            |m| tx_bpsk_signal(m).inflate(64),
-            |s| rx_inflated_bpsk_signal(s, 64),
-            snrs
-        ),
-        BitErrorTest!(
-            "BPSK-16-AVG",
-            |m| tx_bpsk_signal(m).inflate(16),
-            |s| rx_inflated!(rx_bpsk_signal, s, 16),
-            snrs
-        ),
-        BitErrorTest!(
-            "BPSK-32-AVG",
-            |m| tx_bpsk_signal(m).inflate(32),
-            |s| rx_inflated!(rx_bpsk_signal, s, 32),
-            snrs
-        ),
-        BitErrorTest!(
-            "BPSK-64-AVG",
-            |m| tx_bpsk_signal(m).inflate(64),
-            |s| rx_inflated!(rx_bpsk_signal, s, 64),
-            snrs
-        ),
         BitErrorTest!("QPSK", tx_qpsk_signal, rx_qpsk_signal, snrs),
         // CDMA
         BitErrorTest!(
             "CDMA-BPSK-16",
             |m| tx_cdma_bpsk_signal(m, key_16),
             |s| rx_cdma_bpsk_signal(s, key_16),
-            snrs
-        ),
-        BitErrorTest!(
-            "CDMA-BPSK-32",
-            |m| tx_cdma_bpsk_signal(m, key_32),
-            |s| rx_cdma_bpsk_signal(s, key_32),
-            snrs
-        ),
-        BitErrorTest!(
-            "CDMA-BPSK-64",
-            |m| tx_cdma_bpsk_signal(m, key_64),
-            |s| rx_cdma_bpsk_signal(s, key_64),
             snrs
         ),
         BitErrorTest!(
@@ -248,12 +200,12 @@ fn main() {
             snrs
         ),
         // QAM
-        BitErrorTest!(
-            "4QAM",
-            |m| tx_qam_signal(m, 4),
-            |s| rx_qam_signal(s, 4),
-            snrs
-        ),
+        // BitErrorTest!(
+        //     "4QAM",
+        //     |m| tx_qam_signal(m, 4),
+        //     |s| rx_qam_signal(s, 4),
+        //     snrs
+        // ),
         BitErrorTest!(
             "16QAM",
             |m| tx_qam_signal(m, 16),
@@ -293,51 +245,27 @@ fn main() {
         ),
         // OFDM
         BitErrorTest!(
-            "OFDM-BPSK-2-16",
-            |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 14),
-            |s| rx_bpsk_signal(rx_ofdm_signal(s, 16, 14)),
+            "OFDM-BPSK-16",
+            |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 0),
+            |s| rx_bpsk_signal(rx_ofdm_signal(s, 16, 0)),
             snrs
         ),
         BitErrorTest!(
-            "OFDM-QPSK-2-16",
-            |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 14),
-            |s| rx_qpsk_signal(rx_ofdm_signal(s, 16, 14)),
+            "OFDM-QPSK-16",
+            |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 0),
+            |s| rx_qpsk_signal(rx_ofdm_signal(s, 16, 0)),
             snrs
         ),
         BitErrorTest!(
-            "OFDM-BPSK-8-16",
-            |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 8),
-            |s| rx_bpsk_signal(rx_ofdm_signal(s, 16, 8)),
+            "OFDM-BPSK-64",
+            |m| tx_ofdm_signal(tx_bpsk_signal(m), 64, 0),
+            |s| rx_bpsk_signal(rx_ofdm_signal(s, 64, 0)),
             snrs
         ),
         BitErrorTest!(
-            "OFDM-QPSK-8-16",
-            |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 8),
-            |s| rx_qpsk_signal(rx_ofdm_signal(s, 16, 8)),
-            snrs
-        ),
-        BitErrorTest!(
-            "OFDM-BPSK-2-64",
-            |m| tx_ofdm_signal(tx_bpsk_signal(m), 64, 62),
-            |s| rx_bpsk_signal(rx_ofdm_signal(s, 64, 62)),
-            snrs
-        ),
-        BitErrorTest!(
-            "OFDM-QPSK-2-64",
-            |m| tx_ofdm_signal(tx_qpsk_signal(m), 64, 62),
-            |s| rx_qpsk_signal(rx_ofdm_signal(s, 64, 62)),
-            snrs
-        ),
-        BitErrorTest!(
-            "OFDM-BPSK-32-64",
-            |m| tx_ofdm_signal(tx_bpsk_signal(m), 64, 32),
-            |s| rx_bpsk_signal(rx_ofdm_signal(s, 64, 32)),
-            snrs
-        ),
-        BitErrorTest!(
-            "OFDM-QPSK-32-64",
-            |m| tx_ofdm_signal(tx_qpsk_signal(m), 64, 32),
-            |s| rx_qpsk_signal(rx_ofdm_signal(s, 64, 32)),
+            "OFDM-QPSK-64",
+            |m| tx_ofdm_signal(tx_qpsk_signal(m), 64, 0),
+            |s| rx_qpsk_signal(rx_ofdm_signal(s, 64, 0)),
             snrs
         ),
         // Chirp Spread Spectrum
@@ -348,15 +276,15 @@ fn main() {
             snrs
         ),
         BitErrorTest!(
-            "CSS-128",
-            |m| tx_css_signal(m, 128),
-            |s| rx_css_signal(s, 128),
+            "CSS-64",
+            |m| tx_css_signal(m, 64),
+            |s| rx_css_signal(s, 64),
             snrs
         ),
         BitErrorTest!(
-            "CSS-512",
-            |m| tx_css_signal(m, 512),
-            |s| rx_css_signal(s, 512),
+            "CSS-128",
+            |m| tx_css_signal(m, 128),
+            |s| rx_css_signal(s, 128),
             snrs
         ),
         // CSK
@@ -386,17 +314,6 @@ fn main() {
         let file = File::create("/tmp/bers.json").unwrap();
         let mut writer = BufWriter::new(file);
         serde_json::to_writer(&mut writer, &bers).unwrap();
-        writer.flush().unwrap();
-    }
-
-    {
-        // Save the results to a MessagePack file.
-        let file = File::create("/tmp/bers.msgpack").unwrap();
-        let mut writer = BufWriter::new(file);
-        writer
-            // .write_all(&rmp_serde::to_vec_named(&bers).unwrap())
-            .write_all(&rmp_serde::to_vec(&bers).unwrap())
-            .unwrap();
         writer.flush().unwrap();
     }
 
