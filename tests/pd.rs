@@ -65,11 +65,46 @@ fn energy_detect(signal: &[Complex<f64>]) -> f64 {
     10f64 * (signal.iter().map(|&s_i| s_i.norm_sqr()).sum::<f64>()).log10()
 }
 
+fn normal_detect(signal: &[Complex<f64>]) -> f64 {
+    Python::with_gil(|py| {
+        let normtest: Py<PyAny> = PyModule::from_code_bound(
+            py,
+            "import scipy
+import numpy as np
+def p_vals(signal_im, signal_re):
+    t1 = scipy.stats.normaltest(signal_re).statistic
+    t2 = scipy.stats.normaltest(signal_im).statistic
+    return np.mean([t1, t2])",
+            "",
+            "",
+        )
+        .unwrap()
+        .getattr("p_vals")
+        .unwrap()
+        .into();
+
+        let signal_re: Vec<f64> = signal.iter().map(|&s_i| s_i.re).collect();
+        let signal_im: Vec<f64> = signal.iter().map(|&s_i| s_i.im).collect();
+
+        let locals = [("normtest", normtest)].into_py_dict_bound(py);
+        locals.set_item("signal_re", signal_re).unwrap();
+        locals.set_item("signal_im", signal_im).unwrap();
+
+        let λ: f64 = py
+            .eval_bound("normtest(signal_re, signal_im)", None, Some(&locals))
+            .unwrap()
+            .extract()
+            .unwrap();
+        λ
+    })
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 enum Detector {
     Energy,
     MaxCut,
     Dcs,
+    NormalTest,
 }
 
 impl Detector {
@@ -78,17 +113,26 @@ impl Detector {
             Detector::Energy => "Energy Detector",
             Detector::MaxCut => "Max Cut Detector",
             Detector::Dcs => "DCS Detector",
+            Detector::NormalTest => "Normal Test Detector",
         }
     }
     fn iter() -> impl Iterator<Item = Detector> {
-        [Detector::Energy, Detector::MaxCut, Detector::Dcs].into_iter()
+        [
+            Detector::Energy,
+            Detector::MaxCut,
+            Detector::Dcs,
+            Detector::NormalTest,
+        ]
+        .into_iter()
     }
 }
 
 fn run_detectors<I: Iterator<Item = Complex<f64>>>(signal: I) -> Vec<DetectorOutput> {
-    let np = 128;
+    let np = 64;
+    // let np = 128;
     // let np = 256;
-    let n = 8192;
+    let n = 4096;
+    // let n = 8192;
     // let n = 32768;
     let chan_signal: Vec<Complex<f64>> = signal.take(n + np).collect();
     // let chan_signal: Vec<Complex<f64>> = signal.collect();
@@ -108,6 +152,10 @@ fn run_detectors<I: Iterator<Item = Complex<f64>>>(signal: I) -> Vec<DetectorOut
             kind: Detector::Dcs,
             λ: dcs_detect(&sxf_mapped),
             // λ: dcs_detect(&sxf),
+        },
+        DetectorOutput {
+            kind: Detector::NormalTest,
+            λ: normal_detect(&chan_signal),
         },
     ]
 }
@@ -413,7 +461,7 @@ fn main() {
     // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
     // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 15).collect();
     // let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 50).collect();
-    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 2).collect();
+    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 150).collect();
 
     let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
 

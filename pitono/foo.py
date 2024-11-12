@@ -257,11 +257,11 @@ def plot_pd_vs_pfa(
         y = p[mid]["fpr"]
         snr_db = db(modulation["snrs"][mid])
         ax.plot(x, y, label=f"{modulation["name"]}")
-    ax.set_xlabel(r"Probability of False Alarm ($\mathcal{P}_D$)")
+    ax.set_xlabel(r"Probability of False Alarm ($\mathcal{P}_{FA}$)")
     ax.set_ylabel(r"Probability of Detection ($\mathcal{P}_D$)")
     ax.set_title(
         f"{kind}"
-        + r"Detector - $\mathcal{P}_D$ vs $\mathcal{{P}}_D$ - "
+        + r"Detector - $\mathcal{P}_D$ vs $\mathcal{{P}}_{FA}$ - "
         + f"SNR={snr_db:.2f}"
     )
     ax.legend(loc="best")
@@ -323,6 +323,7 @@ DETECTORS: List[str] = [
     "Energy",
     "MaxCut",
     "Dcs",
+    "NormalTest"
 ]
 
 if __name__ == "__main__":
