@@ -7,6 +7,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn import metrics
 
+
 if __name__ == "__main__":
     binification = 128
     # Get Points
@@ -87,7 +88,7 @@ if __name__ == "__main__":
     ax.set_title("ROC Curve")
     ax.axline(xy1=(0, 0), slope=1, color="r", ls=":")
     ax.plot(
-        cut_off.fpr, cut_off.tpr, "ko", ms=10, label=f"Best Threshold = {cut_off.x}"
+        cut_off.fpr, cut_off.tpr, "ko", ms=10, label=f"Best Threshold = {cut_off.x:.2f}"
     )
     ax.set_ylabel("True Positive Rate")
     ax.set_xlabel("False Positive Rate")
