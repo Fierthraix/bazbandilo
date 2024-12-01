@@ -20,7 +20,7 @@ pub fn tx_cdma<'a, I: Iterator<Item = Bit> + 'a>(
 pub fn rx_cdma<'a, I: Iterator<Item = Bit> + 'a>(
     bitstream: I,
     key: &'a [Bit],
-) -> impl Iterator<Item = Bit> + '_ {
+) -> impl Iterator<Item = Bit> + 'a {
     // Multiply by key, and take the average.
     bitstream
         .zip(key.iter().cycle())
@@ -51,7 +51,7 @@ pub fn tx_cdma_bpsk_signal<'a, I: Iterator<Item = Bit> + 'a>(
 pub fn rx_cdma_bpsk_signal<'a, I: Iterator<Item = Complex<f64>> + 'a>(
     signal: I,
     key: &'a [Bit],
-) -> impl Iterator<Item = Bit> + '_ {
+) -> impl Iterator<Item = Bit> + 'a {
     rx_cdma(rx_bpsk_signal(signal), key)
 }
 
@@ -69,7 +69,7 @@ pub fn tx_cdma_qpsk_signal<'a, I: Iterator<Item = Bit> + 'a>(
 pub fn rx_cdma_qpsk_signal<'a, I: Iterator<Item = Complex<f64>> + 'a>(
     signal: I,
     key: &'a [Bit],
-) -> impl Iterator<Item = Bit> + '_ {
+) -> impl Iterator<Item = Bit> + 'a {
     rx_cdma(rx_qpsk_signal(signal), key)
 }
 
