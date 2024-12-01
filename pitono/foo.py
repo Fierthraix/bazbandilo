@@ -82,7 +82,7 @@ def get_cycles(num_lines: int) -> cycler:
         (0, (3, 5, 1, 5)),
     ]
 
-    r: int = int(np.ceil(num_lines / 10))
+    r: int = int(np.ceil(num_lines / len(colours)))
 
     return cycler(color=colours) * cycler(linestyle=linestyles[:r])
 
@@ -94,20 +94,24 @@ def plot_youden_j_with_multiple_modulations(
     title: str = "",
 ):
     fig, ax = plt.subplots()
-
-    ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
-    for modulation in modulation_test_results:
-        snrs = modulation["snrs"]
-        youden_js: List[float] = modulation[kind]["youden_js"]
-        ax.plot(db(snrs), youden_js, label=modulation["name"])
-
     ax.set_xlabel("SNR (db)")
     ax.set_ylabel("Youden J")
-    ax.legend(loc="best")
     if title:
         fig.suptitle(f"{kind} - {title}")
     else:
         fig.suptitle(kind)
+
+    ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
+    for modulation in modulation_test_results:
+        snrs = modulation["snrs"]
+        try:
+            youden_js: List[float] = modulation[kind]["youden_js"]
+        except KeyError:
+            print(f"{kind} detector not found.")
+            return
+        ax.plot(db(snrs), youden_js, label=modulation["name"])
+
+    ax.legend(loc="best")
     if save:
         fig.set_size_inches(16, 9)
         fig.savefig(f"/tmp/Youden-J_{kind}_multiple_modulations.png")
@@ -119,6 +123,7 @@ def plot_pd_vs_ber(
     try:
         mod_ber = next(b for b in bers if b["name"] == modulation["name"])
     except TypeError:
+        print(f"BER for {modulation["name"]} not found.")
         return
     fig, ax = plt.subplots()
     ber_ax = ax
@@ -144,7 +149,7 @@ def plot_pd_vs_ber(
     # pd_ax.plot(-12.0556, good_pd, "bo")
     # pd_ax.axhline(good_pd, color='Blue', ls='--', label=f'Acceptable ℙd ({good_pd})')
     pd_ax.tick_params(axis="y", colors="Blue")
-    pd_ax.set_ylabel(r"Probability of Detection ($\mathcal{P}_D$)", color="Blue")
+    pd_ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)", color="Blue")
     pd_ax.legend(loc="best")
     ax.set_xlabel("Signal to Noise Ratio dB (SNR dB)")
     ax.set_title(modulation["name"])
@@ -223,19 +228,29 @@ def plot_pd_vs_ber_metric(
 ):
     fig, ax = plt.subplots()
     ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
+    ax.set_xlabel(r"Probability of Detection ($\mathbb{P}_D$)")
+    ax.set_ylabel("Bit Error Rate (BER)")
+    ax.set_title(f"{kind}" + r"Detector - BER vs $\mathbb{{P}}_D$")
     for modulation in modulation_test_results:
         try:
             mod_ber = next(b for b in bers if b["name"] == modulation["name"])
         except TypeError:
             return
+        except StopIteration:
+            print(f'{modulation["name"]} BER not found.')
+            return
 
-        x = modulation[kind]["youden_js"]
+        try:
+            x = modulation[kind]["youden_js"]
+        except KeyError:
+            print(f"{kind} detector not found")
+            return
         y = mod_ber["bers"]
         r = min(len(x), len(y))
         ax.plot(x[:r], y[:r], label=modulation["name"])
-    ax.set_xlabel(r"Probability of Detection ($\mathcal{P}_D$)")
+    ax.set_xlabel(r"Probability of Detection ($\mathbb{P}_D$)")
     ax.set_ylabel("Bit Error Rate (BER)")
-    ax.set_title(f"{kind}" + r"Detector - BER vs $\mathcal{{P}}_D$")
+    ax.set_title(f"{kind} Detector" + r" - BER vs $\mathbb{P}_D$")
     ax.legend(loc="best")
 
     if save:
@@ -250,21 +265,26 @@ def plot_pd_vs_pfa(
 ):
     fig, ax = plt.subplots()
     ax.set_prop_cycle(get_cycles(len(results_object)))
+    ax.set_xlabel(r"Probability of False Alarm ($\mathbb{P}_{FA}$)")
+    ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)")
+    ax.set_title(f"{kind} Detector" + r"- $\mathbb{P}_D$ vs $\mathbb{{P}}_{FA}$")
     for modulation in results_object:
-        p = modulation[kind]["df"]
+        try:
+            p = modulation[kind]["df"]
+        except KeyError:
+            print(f"{kind} detector not found.")
+            return
         mid = len(p) // 2
         x = p[mid]["tpr"]
         y = p[mid]["fpr"]
         snr_db = db(modulation["snrs"][mid])
         ax.plot(x, y, label=f"{modulation["name"]}")
-    ax.set_xlabel(r"Probability of False Alarm ($\mathcal{P}_{FA}$)")
-    ax.set_ylabel(r"Probability of Detection ($\mathcal{P}_D$)")
+    ax.legend(loc="best")
     ax.set_title(
         f"{kind}"
-        + r"Detector - $\mathcal{P}_D$ vs $\mathcal{{P}}_{FA}$ - "
+        + r"Detector - $\mathbb{P}_D$ vs $\mathbb{{P}}_{FA}$ - "
         + f"SNR={snr_db:.2f}"
     )
-    ax.legend(loc="best")
 
     if save:
         fig.set_size_inches(16, 9)
@@ -319,12 +339,7 @@ def parse_args() -> Namespace:
     return ap.parse_args()
 
 
-DETECTORS: List[str] = [
-    "Energy",
-    "MaxCut",
-    "Dcs",
-    "NormalTest"
-]
+DETECTORS: List[str] = ["Energy", "MaxCut", "Dcs", "NormalTest"]
 
 if __name__ == "__main__":
     import json
@@ -370,14 +385,15 @@ if __name__ == "__main__":
             for detector in DETECTORS:
                 plot_pd_vs_pfa(regressed, detector, save=args.save)
 
-            for modulation in regressed:
-                plot_pd_vs_ber(modulation, bers, save=args.save)
+            # for modulation in regressed:
+            #     plot_pd_vs_ber(modulation, bers, save=args.save)
 
-            for detector in DETECTORS:
-                plot_λ_vs_snr(regressed, detector, save=args.save)
+            # for detector in DETECTORS:
+            #     plot_λ_vs_snr(regressed, detector, save=args.save)
 
             for detector in DETECTORS:
                 plot_pd_vs_ber_metric(regressed, bers, detector, save=args.save)
+
     plot_all_bers(bers, save=args.save)
 
     plt.show()
