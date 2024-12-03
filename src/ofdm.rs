@@ -26,7 +26,7 @@ pub fn tx_ofdm_signal<I: Iterator<Item = Complex<f64>>>(
 ) -> impl Iterator<Item = Complex<f64>> {
     assert!(pilots < subcarriers);
     let num_data_subcarriers = subcarriers - pilots;
-    let cp_len = subcarriers / 4;
+    // let cp_len = subcarriers / 4;
 
     let data_subcarriers: Vec<usize> = get_data_subcarriers(subcarriers, pilots);
 
@@ -47,12 +47,14 @@ pub fn tx_ofdm_signal<I: Iterator<Item = Complex<f64>>>(
             let mut ofdm_symbols = fftshift(&ofdm_symbol_data);
             fft.process_with_scratch(&mut ofdm_symbols, &mut fft_scratch); // IFFT
 
-            let cp = ofdm_symbols[subcarriers - cp_len..subcarriers]
-                .iter()
-                .cloned();
+            // let cp = ofdm_symbols[subcarriers - cp_len..subcarriers]
+            //     .iter()
+            //     .cloned();
 
-            let cp_symbol: Vec<Complex<f64>> = cp
-                .chain(ofdm_symbols.iter().cloned())
+            // let cp_symbol: Vec<Complex<f64>> = cp
+            //     .chain(ofdm_symbols.iter().cloned())
+            let cp_symbol: Vec<Complex<f64>> = ofdm_symbols
+                .into_iter()
                 .map(|s_i| s_i / (subcarriers as f64) /*.sqrt()*/)
                 .collect();
 

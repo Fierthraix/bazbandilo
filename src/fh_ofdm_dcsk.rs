@@ -4,7 +4,7 @@ use rustfft::num_traits::Zero;
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::iter;
 
-const NUM_SUBCARRIERS: usize = 8;
+const NUM_SUBCARRIERS: usize = 64;
 const CP_LEN: usize = NUM_SUBCARRIERS / 4;
 
 const SEED: u64 = 64;
@@ -52,12 +52,13 @@ pub fn tx_fh_ofdm_dcsk_signal<I: Iterator<Item = Bit>>(
             debug_assert_eq!(ifft_symbols.len(), NUM_SUBCARRIERS);
             fft.process_with_scratch(&mut ifft_symbols, &mut fft_scratch); // IFFT
 
-            let cp = ifft_symbols[NUM_SUBCARRIERS - CP_LEN..NUM_SUBCARRIERS]
-                .iter()
-                .cloned();
+            // let cp = ifft_symbols[NUM_SUBCARRIERS - CP_LEN..NUM_SUBCARRIERS]
+            //     .iter()
+            //     .cloned();
 
-            let cp_symbol: Vec<Complex<f64>> = cp
-                .chain(ifft_symbols.iter().cloned())
+            // let cp_symbol: Vec<Complex<f64>> = cp
+            let cp_symbol: Vec<Complex<f64>> = ifft_symbols
+                .into_iter()
                 .map(|s_i| s_i / (NUM_SUBCARRIERS as f64))
                 .collect();
 

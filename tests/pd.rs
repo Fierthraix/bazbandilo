@@ -2,7 +2,6 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::sync::Mutex;
 
-use convert_case::{Case, Casing};
 use kdam::{par_tqdm, BarExt};
 use num::Zero;
 use num_complex::Complex;
@@ -21,11 +20,11 @@ use bazbandilo::{
     cdma::{tx_cdma_bpsk_signal, tx_cdma_qpsk_signal},
     csk::tx_csk_signal,
     css::tx_css_signal,
-    db,
     dcsk::{tx_dcsk_signal, tx_qcsk_signal},
     fh_ofdm_dcsk::tx_fh_ofdm_dcsk_signal,
     fsk::tx_bfsk_signal,
     hadamard::HadamardMatrix,
+    iter::Iter,
     linspace,
     ofdm::tx_ofdm_signal,
     psk::{tx_bpsk_signal, tx_qpsk_signal},
@@ -190,103 +189,9 @@ struct DetectorTest<'a> {
     run_fn: &'a dyn Fn(&[f64]) -> ModulationDetectorResults,
 }
 
-impl<'a> DetectorTest<'a> {
+impl DetectorTest<'_> {
     fn run(self) -> ModulationDetectorResults {
         (self.run_fn)(&self.snrs)
-    }
-}
-
-/// Youden-J calculation of detector output.
-#[derive(Clone)]
-struct LogRegressResults {
-    name: String,
-    detector: DetectorResults,
-    youden_js: Vec<f64>,
-}
-
-struct ModulationLogRegressResults(Vec<LogRegressResults>);
-
-fn log_regress(results: &DetectorResults, name: &str) -> LogRegressResults {
-    let youden_js: Vec<f64> = Python::with_gil(|py| {
-        let pandas = py.import_bound("pandas").unwrap();
-        let numpy = py.import_bound("numpy").unwrap();
-        let sklearn = py.import_bound("sklearn").unwrap();
-        let linear_model = py.import_bound("sklearn.linear_model").unwrap();
-        let model_selection = py.import_bound("sklearn.model_selection").unwrap();
-        let locals = [
-            ("linear_model", linear_model),
-            ("model_selection", model_selection),
-            ("np", numpy),
-            ("sklearn", sklearn),
-            ("pd", pandas),
-        ]
-        .into_py_dict_bound(py);
-
-        let youden_js: Vec<f64> = results
-            .h0_λs
-            .iter()
-            .zip(results.h1_λs.iter())
-            .map(|(h0, h1)| {
-                locals.set_item("h0_λs", h0).unwrap();
-                locals.set_item("h1_λs", h1).unwrap();
-
-                // py.run_bound(statement, None, Some(&locals));
-                py.run_bound(
-                    r#"
-x_var = np.concatenate((h0_λs, h1_λs)).reshape(-1, 1)
-y_var = np.concatenate((np.zeros(len(h0_λs)), np.ones(len(h1_λs))))
-x_train, x_test, y_train, y_test = model_selection.train_test_split(
-    x_var, y_var, test_size=0.5, random_state=0
-)
-
-log_regression = linear_model.LogisticRegression()
-log_regression.fit(x_train, y_train)
-
-y_pred_proba = log_regression.predict_proba(x_test)[::, 1]
-fpr, tpr, thresholds = sklearn.metrics.roc_curve(
-    y_test, y_pred_proba, drop_intermediate=False
-)
-
-df_test = pd.DataFrame(
-    {
-        "x": x_test.flatten(),
-        "y": y_test,
-        "proba": y_pred_proba,
-    }
-)
-
-# sort it by predicted probabilities
-# because thresholds[1:] = y_proba[::-1]
-df_test.sort_values(by="proba", inplace=True)
-if len(tpr) == len(h0_λs):
-    df_test["tpr"] = tpr[::-1]
-else:
-    df_test["tpr"] = tpr[1:][::-1]
-if len(fpr) == len(h0_λs):
-    df_test["fpr"] = fpr[::-1]
-else:
-    df_test["fpr"] = fpr[1:][::-1]
-df_test["youden_j"] = df_test.tpr - df_test.fpr
-        "#,
-                    None,
-                    Some(&locals),
-                )
-                .unwrap();
-
-                let youden_j: f64 = py
-                    .eval_bound(r#"max(abs(df_test["youden_j"]))"#, None, Some(&locals))
-                    .unwrap()
-                    .extract()
-                    .unwrap();
-                youden_j
-            })
-            .collect();
-        youden_js
-    });
-    LogRegressResults {
-        name: name.into(),
-        detector: results.clone(),
-        youden_js,
     }
 }
 
@@ -318,9 +223,6 @@ fn remap_results(λs: &[Vec<Vec<DetectorOutput>>], kind: &str) -> Vec<Vec<f64>> 
 const NUM_SAMPLES: usize = 65536;
 
 const NUM_ATTEMPTS: usize = 1000;
-// const NUM_ATTEMPTS: usize = 500;
-// const NUM_ATTEMPTS: usize = 250;
-// const NUM_ATTEMPTS: usize = 75;
 // const NUM_ATTEMPTS: usize = 20;
 
 macro_rules! DetectorTest {
@@ -398,69 +300,9 @@ macro_rules! DetectorTest {
     }};
 }
 
-fn plot_thing(regressions: Vec<LogRegressResults>, snrs: &[f64]) {
-    Python::with_gil(|py| {
-        let cycler = py.import_bound("cycler").unwrap();
-        let matplotlib = py.import_bound("matplotlib").unwrap();
-        let plt = py.import_bound("matplotlib.pyplot").unwrap();
-        let locals =
-            [("cycler", cycler), ("matplotlib", matplotlib), ("plt", plt)].into_py_dict_bound(py);
-
-        let snrs_db: Vec<f64> = snrs.iter().cloned().map(db).collect();
-        locals.set_item("snrs", snrs).unwrap();
-        locals.set_item("snrs_db", &snrs_db).unwrap();
-
-        let (fig, axes): (&PyAny, &PyAny) = py
-            .eval_bound("plt.subplots(1)", None, Some(&locals))
-            .unwrap()
-            .extract()
-            .unwrap();
-        // let (fig, axes): (&PyObject, &PyObject) = py
-        // let x: &PyAny = py
-        //     .eval_bound("plt.subplots(1)", None, Some(&locals))
-        //     .unwrap()
-        //     .extract()
-        //     .unwrap();
-        locals.set_item("fig", fig).unwrap();
-        locals.set_item("axes", axes).unwrap();
-
-        py.run_bound("cycles = (cycler.cycler(color=['r', 'g', 'b', 'c', 'm', 'y']) * cycler.cycler(linestyle=['-', ':', '-.']))", None, Some(&locals)).unwrap();
-        py.eval_bound("axes.set_prop_cycle(cycles)", None, Some(&locals))
-            .unwrap();
-
-        // Plot the BER.
-        for modulation in regressions.iter() {
-            let py_name = format!("youden_js_{}", modulation.name).to_case(Case::Snake);
-            locals.set_item(&py_name, &modulation.youden_js).unwrap();
-            py.eval_bound(
-                &format!(
-                    "axes.plot(snrs_db[:len({})], {}, label='{}')",
-                    py_name, py_name, modulation.name,
-                ),
-                None,
-                Some(&locals),
-            )
-            .unwrap();
-        }
-        for line in [
-            &format!("axes.set_title('{}')", regressions[0].name),
-            "axes.legend(loc='best')",
-            "axes.set_xlabel('SNR (dB)')",
-            r"axes.set_ylabel('$\mathbb{P}_d$')",
-            "plt.show()",
-        ] {
-            println!("{}", line);
-            py.eval_bound(line, None, Some(&locals)).unwrap();
-        }
-    });
-}
-
 #[test]
 fn main() {
-    // let snrs_db: Vec<f64> = linspace(-10f64, 12f64, 50).collect();
-    // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
-    // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 15).collect();
-    // let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 50).collect();
+    // let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 15).collect();
     let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 150).collect();
 
     let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
@@ -474,33 +316,44 @@ fn main() {
 
     let harness = [
         // PSK
-        DetectorTest!("BPSK", tx_bpsk_signal, snrs),
-        DetectorTest!("QPSK", tx_qpsk_signal, snrs),
+        DetectorTest!("BPSK", |m| tx_bpsk_signal(m).inflate(64), snrs),
+        DetectorTest!("QPSK", |m| tx_qpsk_signal(m).inflate(64), snrs),
         // CDMA
-        DetectorTest!("CDMA-BPSK-16", |m| tx_cdma_bpsk_signal(m, key_16), snrs),
-        DetectorTest!("CDMA-QPSK-16", |m| tx_cdma_qpsk_signal(m, key_16), snrs),
+        DetectorTest!(
+            "CDMA-BPSK-16",
+            |m| tx_cdma_bpsk_signal(m, key_16).inflate(4),
+            snrs
+        ),
+        DetectorTest!(
+            "CDMA-QPSK-16",
+            |m| tx_cdma_qpsk_signal(m, key_16).inflate(4),
+            snrs
+        ),
         // DetectorTest!("CDMA-BPSK-32", |m| tx_cdma_bpsk_signal(m, key_32), snrs),
-        DetectorTest!("CDMA-QPSK-32", |m| tx_cdma_qpsk_signal(m, key_32), snrs),
+        DetectorTest!(
+            "CDMA-QPSK-32",
+            |m| tx_cdma_qpsk_signal(m, key_32).inflate(2),
+            snrs
+        ),
         // DetectorTest!("CDMA-BPSK-64", |m| tx_cdma_bpsk_signal(m, key_64), snrs),
         DetectorTest!("CDMA-QPSK-64", |m| tx_cdma_qpsk_signal(m, key_64), snrs),
         // QAM
         // DetectorTest!("4QAM", |m| tx_qam_signal(m, 4), snrs),
-        DetectorTest!("16QAM", |m| tx_qam_signal(m, 16), snrs),
+        DetectorTest!("16QAM", |m| tx_qam_signal(m, 16).inflate(4), snrs),
         DetectorTest!("64QAM", |m| tx_qam_signal(m, 64), snrs),
-        DetectorTest!("1024QAM", |m| tx_qam_signal(m, 1024), snrs),
         // BFSK
-        DetectorTest!("BFSK-16", |m| tx_bfsk_signal(m, 16), snrs),
-        DetectorTest!("BFSK-32", |m| tx_bfsk_signal(m, 32), snrs),
+        DetectorTest!("BFSK-16", |m| tx_bfsk_signal(m, 16).inflate(4), snrs),
+        DetectorTest!("BFSK-32", |m| tx_bfsk_signal(m, 32).inflate(2), snrs),
         DetectorTest!("BFSK-64", |m| tx_bfsk_signal(m, 64), snrs),
         // OFDM
         DetectorTest!(
             "OFDM-BPSK-16",
-            |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 0),
+            |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 0).inflate(4),
             snrs
         ),
         DetectorTest!(
             "OFDM-QPSK-16",
-            |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 0),
+            |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 0).inflate(4),
             snrs
         ),
         DetectorTest!(
@@ -514,68 +367,89 @@ fn main() {
             snrs
         ),
         // Chirp Spread Spectrum
-        DetectorTest!("CSS-16", |m| tx_css_signal(m, 16), snrs),
+        DetectorTest!("CSS-16", |m| tx_css_signal(m, 16).inflate(4), snrs),
         DetectorTest!("CSS-64", |m| tx_css_signal(m, 64), snrs),
-        DetectorTest!("CSS-128", |m| tx_css_signal(m, 128), snrs),
+        // DetectorTest!("CSS-128", |m| tx_css_signal(m, 128), snrs),
         // CSK
-        DetectorTest!("CSK", tx_csk_signal, snrs),
-        DetectorTest!("DCSK", tx_dcsk_signal, snrs),
-        DetectorTest!("QCSK", tx_qcsk_signal, snrs),
+        DetectorTest!("CSK", |m| tx_csk_signal(m).inflate(64), snrs),
+        DetectorTest!("DCSK", |m| tx_dcsk_signal(m).inflate(32), snrs),
+        DetectorTest!("QCSK", |m| tx_qcsk_signal(m).inflate(32), snrs),
         // FH-OFDM-DCSK
         DetectorTest!("FH-OFDM-DCSK", tx_fh_ofdm_dcsk_signal, snrs),
     ];
 
-    let results: Vec<ModulationDetectorResults> = harness
-        .into_iter()
-        .map(|modulation| modulation.run())
-        .collect();
+    // let harness = [
+    //     // PSK
+    //     DetectorTest!("BPSK", tx_bpsk_signal, snrs),
+    //     DetectorTest!("QPSK", tx_qpsk_signal, snrs),
+    //     // CDMA
+    //     DetectorTest!("CDMA-BPSK-16", |m| tx_cdma_bpsk_signal(m, key_16), snrs),
+    //     DetectorTest!("CDMA-QPSK-16", |m| tx_cdma_qpsk_signal(m, key_16), snrs),
+    //     // DetectorTest!("CDMA-BPSK-32", |m| tx_cdma_bpsk_signal(m, key_32), snrs),
+    //     DetectorTest!("CDMA-QPSK-32", |m| tx_cdma_qpsk_signal(m, key_32), snrs),
+    //     // DetectorTest!("CDMA-BPSK-64", |m| tx_cdma_bpsk_signal(m, key_64), snrs),
+    //     DetectorTest!("CDMA-QPSK-64", |m| tx_cdma_qpsk_signal(m, key_64), snrs),
+    //     // QAM
+    //     // DetectorTest!("4QAM", |m| tx_qam_signal(m, 4), snrs),
+    //     DetectorTest!("16QAM", |m| tx_qam_signal(m, 16), snrs),
+    //     DetectorTest!("64QAM", |m| tx_qam_signal(m, 64), snrs),
+    //     DetectorTest!("1024QAM", |m| tx_qam_signal(m, 1024), snrs),
+    //     // BFSK
+    //     DetectorTest!("BFSK-16", |m| tx_bfsk_signal(m, 16), snrs),
+    //     DetectorTest!("BFSK-32", |m| tx_bfsk_signal(m, 32), snrs),
+    //     DetectorTest!("BFSK-64", |m| tx_bfsk_signal(m, 64), snrs),
+    //     // OFDM
+    //     DetectorTest!(
+    //         "OFDM-BPSK-16",
+    //         |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 0),
+    //         snrs
+    //     ),
+    //     DetectorTest!(
+    //         "OFDM-QPSK-16",
+    //         |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 0),
+    //         snrs
+    //     ),
+    //     DetectorTest!(
+    //         "OFDM-BPSK-64",
+    //         |m| tx_ofdm_signal(tx_bpsk_signal(m), 64, 0),
+    //         snrs
+    //     ),
+    //     DetectorTest!(
+    //         "OFDM-QPSK-64",
+    //         |m| tx_ofdm_signal(tx_qpsk_signal(m), 64, 0),
+    //         snrs
+    //     ),
+    //     // Chirp Spread Spectrum
+    //     DetectorTest!("CSS-16", |m| tx_css_signal(m, 16), snrs),
+    //     DetectorTest!("CSS-64", |m| tx_css_signal(m, 64), snrs),
+    //     DetectorTest!("CSS-128", |m| tx_css_signal(m, 128), snrs),
+    //     // CSK
+    //     DetectorTest!("CSK", tx_csk_signal, snrs),
+    //     DetectorTest!("DCSK", tx_dcsk_signal, snrs),
+    //     DetectorTest!("QCSK", tx_qcsk_signal, snrs),
+    //     // FH-OFDM-DCSK
+    //     DetectorTest!("FH-OFDM-DCSK", tx_fh_ofdm_dcsk_signal, snrs),
+    // ];
 
-    // Save results to file.
-    {
-        let name = "/tmp/results.json";
-        let file = File::create(name).unwrap();
-        let mut writer = BufWriter::new(file);
-        serde_json::to_writer(&mut writer, &results).unwrap();
+    let results: Vec<ModulationDetectorResults> = {
+        let mut results = Vec::with_capacity(harness.len());
+        for modulation in harness {
+            let result = modulation.run();
+            results.push(result);
 
-        writer.flush().unwrap();
-        println!("Saved {}", name);
-    }
+            // Save results to file.
+            {
+                let name = "/tmp/results.json";
+                let file = File::create(name).unwrap();
+                let mut writer = BufWriter::new(file);
+                serde_json::to_writer(&mut writer, &results).unwrap();
 
-    /*
-    let regressions: Vec<ModulationLogRegressResults> = results
-        .iter()
-        .map(|test_results| {
-            ModulationLogRegressResults(
-                test_results
-                    .results
-                    .iter()
-                    .map(|dx_result| log_regress(dx_result, &test_results.name))
-                    .collect(),
-            )
-        })
-        .collect();
+                writer.flush().unwrap();
+                println!("Saved {}", name);
+            }
+        }
+        results
+    };
 
-    for dx in Detector::iter() {
-        let log_regresses: Vec<LogRegressResults> = {
-            regressions
-                .iter()
-                .map(|mod_log_result| {
-                    mod_log_result
-                        .0
-                        .iter()
-                        .filter_map(|log_result| {
-                            if log_result.detector.kind.get() == dx.get() {
-                                Some(log_result.clone())
-                            } else {
-                                None
-                            }
-                        })
-                        .next()
-                        .unwrap()
-                })
-                .collect()
-        };
-        // plot_thing(log_regresses, &snrs);
-    }
-        */
+    drop(results);
 }
