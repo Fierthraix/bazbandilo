@@ -136,7 +136,7 @@ def plot_pd_vs_ber(
     ber_ax.set_ylabel("Bit Error Rate (BER)", color="Red")
     ber_ax.legend(loc="best")
 
-    linestyles = ["solid", "dashed", "dashdot"]
+    linestyles = ["solid", "dashed", "dashdot", "dotted"]
     for detector, style in zip(DETECTORS, linestyles):
         pd_ax.plot(
             db(modulation["snrs"]),
@@ -312,11 +312,14 @@ def plot_λ_vs_snr(
             λ0s.append(λ0)
 
         ax.plot(db(modulation["snrs"]), λ0s, label=f"{modulation['name']}")
-    ax.set_xlabel("Threshold λ")
-    ax.set_ylabel("SNR (dB)")
+    ax.set_xlabel("SNR (dB)")
+    ax.set_ylabel("Threshold λ")
     ax.set_title(f"Threshold vs SNR ({kind})")
     ax.legend(loc="best")
 
+    if save:
+        fig.set_size_inches(16, 9)
+        fig.savefig(f"/tmp/lambda_{kind}.png")
 
 def filter_results(
     results_object: List[Dict[str, object]], pattern: re.Pattern
@@ -385,15 +388,16 @@ if __name__ == "__main__":
             for detector in DETECTORS:
                 plot_pd_vs_pfa(regressed, detector, save=args.save)
 
-            # for modulation in regressed:
-            #     plot_pd_vs_ber(modulation, bers, save=args.save)
+            for modulation in regressed:
+                plot_pd_vs_ber(modulation, bers, save=args.save)
 
-            # for detector in DETECTORS:
-            #     plot_λ_vs_snr(regressed, detector, save=args.save)
+            for detector in DETECTORS:
+                plot_λ_vs_snr(regressed, detector, save=args.save)
 
             for detector in DETECTORS:
                 plot_pd_vs_ber_metric(regressed, bers, detector, save=args.save)
 
     plot_all_bers(bers, save=args.save)
 
-    plt.show()
+    if not args.save:
+        plt.show()
