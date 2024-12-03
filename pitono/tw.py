@@ -57,15 +57,28 @@ def plot_all_tws(
     fig.suptitle("SNR vs PD - Different $TW$ products")
 
     ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
+    midline_snrs = []
     for modulation in modulation_test_results:
         snrs = modulation["snrs"]
-        youden_js: List[float] = modulation["results"]["youden_js"]
+        youden_js: List[float] = np.array(modulation["results"]["youden_js"])
         ax.plot(db(snrs), youden_js, label=modulation["name"])
+        pd = 0.5
+        midline = np.abs(youden_js - pd).argmin()
+        # ax.axvline(db(snrs[midline]), color="k", ls="--")
+        print(f"{modulation["name"]} - {db(snrs[midline])}")
+        midline_snrs.append(db(snrs[midline]))
+
+    midline_snrs = np.array(midline_snrs)
+    diffs = midline_snrs[:-1] - midline_snrs[1:]
+    print(f"Diffs: {diffs}")
+
+    print(f"Average: {np.average(diffs)}")
 
     ax.legend(loc="best")
     if save:
         fig.set_size_inches(16, 9)
         fig.savefig("/tmp/Youden-J_different_TW_product.png")
+
 
 
 def plot_all_tws_old(
