@@ -1,3 +1,5 @@
+use std::ffi::CString;
+
 use bazbandilo::linspace;
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;

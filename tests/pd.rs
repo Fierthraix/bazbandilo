@@ -1,3 +1,4 @@
+use std::ffi::CString;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::sync::Mutex;
@@ -65,16 +66,16 @@ fn energy_detect(signal: &[Complex<f64>]) -> f64 {
 
 fn normal_detect(signal: &[Complex<f64>]) -> f64 {
     Python::with_gil(|py| {
-        let normtest: Py<PyAny> = PyModule::from_code_bound(
+        let normtest: Py<PyAny> = PyModule::from_code(
             py,
-            "import scipy
+            c!("import scipy
 import numpy as np
 def p_vals(signal_im, signal_re):
     t1 = scipy.stats.normaltest(signal_re).statistic
     t2 = scipy.stats.normaltest(signal_im).statistic
-    return np.mean([t1, t2])",
-            "",
-            "",
+    return np.mean([t1, t2])"),
+            c!(""),
+            c!(""),
         )
         .unwrap()
         .getattr("p_vals")
@@ -84,12 +85,12 @@ def p_vals(signal_im, signal_re):
         let signal_re: Vec<f64> = signal.iter().map(|&s_i| s_i.re).collect();
         let signal_im: Vec<f64> = signal.iter().map(|&s_i| s_i.im).collect();
 
-        let locals = [("normtest", normtest)].into_py_dict_bound(py);
+        let locals = [("normtest", normtest)].into_py_dict(py).unwrap();
         locals.set_item("signal_re", signal_re).unwrap();
         locals.set_item("signal_im", signal_im).unwrap();
 
         let λ: f64 = py
-            .eval_bound("normtest(signal_re, signal_im)", None, Some(&locals))
+            .eval(c!("normtest(signal_re, signal_im)"), None, Some(&locals))
             .unwrap()
             .extract()
             .unwrap();

@@ -1,3 +1,4 @@
+use std::ffi::CString;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::sync::Mutex;
@@ -25,7 +26,6 @@ use bazbandilo::{
     fh_ofdm_dcsk::{rx_fh_ofdm_dcsk_signal, tx_fh_ofdm_dcsk_signal},
     fsk::{rx_bfsk_signal, tx_bfsk_signal},
     hadamard::HadamardMatrix,
-    iter::Iter,
     linspace,
     ofdm::{rx_ofdm_signal, tx_ofdm_signal},
     psk::{rx_bpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_qpsk_signal},
@@ -51,7 +51,7 @@ struct BitErrorTest<'a> {
     calc_ber_fn: &'a dyn Fn(&[f64]) -> Vec<f64>,
 }
 
-impl<'a> BitErrorTest<'a> {
+impl BitErrorTest<'_> {
     fn calc_bers(self) -> BitErrorResults {
         let bers: Vec<f64> = (self.calc_ber_fn)(&self.snrs);
         let snrs = self.snrs[..bers.len()].to_vec();
@@ -63,7 +63,7 @@ impl<'a> BitErrorTest<'a> {
     }
 }
 
-// const NUM_SAMPLES: usize = 65536;
+const NUM_SAMPLES: usize = 65536;
 const NUM_BITS: usize = 65536;
 const NUM_ERRORS: usize = 100_000;
 // const NUM_ERRORS: usize = 100;
@@ -82,15 +82,14 @@ macro_rules! BitErrorTest {
                 pb.set_description($name);
                 let pb = Mutex::new(pb);
 
-                // let (energy_signal, num_samples, num_bits) =
-                //     energy_samples_bits!(NUM_SAMPLES, $tx_fn);
-                let eb = eb!($tx_fn, $rx_fn, NUM_BITS);
+                let (energy_signal, num_samples, _) = energy_samples_bits!($tx_fn, NUM_SAMPLES);
+                // let eb = eb!($tx_fn, $rx_fn, NUM_BITS);
 
                 let mut bers: Vec<f64> = Vec::with_capacity(snrs.len());
-                // let n0s = snrs
-                //     .iter()
-                // .map(|snr| (energy_signal / (2f64 * num_samples as f64 * snr)).sqrt());
-                let n0s = snrs.iter().map(|snr| (eb / (2f64 * snr)).sqrt());
+                let n0s = snrs
+                    .iter()
+                    .map(|snr| (energy_signal / (2f64 * num_samples as f64 * snr)).sqrt());
+                // let n0s = snrs.iter().map(|snr| (eb / (2f64 * snr)).sqrt());
 
                 for n0 in n0s {
                     let mut errors = 0;
@@ -133,33 +132,29 @@ macro_rules! BitErrorTest {
     }};
 }
 
-macro_rules! rx_inflated {
-    ($rx:expr, $signal:expr, $chunks:expr) => {{
-        $rx($signal)
-            .chunks($chunks)
-            .map(|r_i| r_i.into_iter().map(bit_to_nrz).sum::<f64>() > 0f64)
-    }};
-}
+// macro_rules! rx_inflated {
+//     ($rx:expr, $signal:expr, $chunks:expr) => {{
+//         $rx($signal)
+//             .chunks($chunks)
+//             .map(|r_i| r_i.into_iter().map(bit_to_nrz).sum::<f64>() > 0f64)
+//     }};
+// }
 
-fn rx_inflated_bpsk_signal<I: Iterator<Item = Complex<f64>>>(
-    signal: I,
-    chunks: usize,
-) -> impl Iterator<Item = Bit> {
-    rx_bpsk_signal(
-        signal
-            .chunks(chunks)
-            .map(|chunk| chunk.iter().sum::<Complex<f64>>() / chunk.len() as f64),
-    )
-}
+// fn rx_inflated_bpsk_signal<I: Iterator<Item = Complex<f64>>>(
+//     signal: I,
+//     chunks: usize,
+// ) -> impl Iterator<Item = Bit> {
+//     rx_bpsk_signal(
+//         signal
+//             .chunks(chunks)
+//             .map(|chunk| chunk.iter().sum::<Complex<f64>>() / chunk.len() as f64),
+//     )
+// }
 
 #[test]
 fn main() {
-    // let snrs_db: Vec<f64> = linspace(-25f64, 10f64, 35).collect();
-    // let snrs_db: Vec<f64> = linspace(-25f64, 6f64, 25).collect();
-    // let snrs_db: Vec<f64> = linspace(-25f64, 12f64, 50).collect();
-    // let snrs_db: Vec<f64> = linspace(-25f64, 10f64, 50).collect();
-    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 2).collect();
-    // let snrs_db: Vec<f64> = linspace(0.0, 13f64, 25).collect();
+    // let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 15).collect();
+    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 150).collect();
 
     let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
 
@@ -318,18 +313,21 @@ fn main() {
     }
 
     Python::with_gil(|py| {
-        let matplotlib = py.import_bound("matplotlib").unwrap();
-        let plt = py.import_bound("matplotlib.pyplot").unwrap();
-        let locals = [("matplotlib", matplotlib), ("plt", plt)].into_py_dict_bound(py);
+        let matplotlib = py.import("matplotlib").unwrap();
+        let plt = py.import("matplotlib.pyplot").unwrap();
+        let locals = [("matplotlib", matplotlib), ("plt", plt)]
+            .into_py_dict(py)
+            .unwrap();
 
         locals.set_item("snrs", &snrs).unwrap();
         locals.set_item("snrs_db", &snrs_db).unwrap();
 
-        let (fig, axes): (&PyAny, &PyAny) = py
-            .eval_bound("plt.subplots(1)", None, Some(&locals))
+        let (fig, axes): (PyObject, PyObject) = py
+            .eval(c!("plt.subplots(1)"), None, Some(&locals))
             .unwrap()
             .extract()
             .unwrap();
+
         locals.set_item("fig", fig).unwrap();
         locals.set_item("axes", axes).unwrap();
 
@@ -337,11 +335,11 @@ fn main() {
         for ber_result in bers.iter() {
             let py_name = format!("bers_{}", ber_result.name).to_case(Case::Snake);
             locals.set_item(&py_name, &ber_result.bers).unwrap();
-            py.eval_bound(
-                &format!(
+            py.eval(
+                c!(format!(
                     "axes.plot(snrs_db[:len({})], {}, label='{}')",
                     py_name, py_name, ber_result.name
-                ),
+                )),
                 None,
                 Some(&locals),
             )
@@ -353,13 +351,13 @@ fn main() {
 
         for line in [
             // "axes.plot(snrs_db, bpsk_theory, label='BPSK Theoretical')",
-            "axes.legend(loc='best')",
-            "axes.set_yscale('log')",
-            "axes.set_xlabel('SNR (dB)')",
-            "axes.set_ylabel('BER')",
-            // "plt.show()",
+            c!("axes.legend(loc='best')"),
+            c!("axes.set_yscale('log')"),
+            c!("axes.set_xlabel('SNR (dB)')"),
+            c!("axes.set_ylabel('BER')"),
+            c!("plt.show()"),
         ] {
-            py.eval_bound(line, None, Some(&locals)).unwrap();
+            py.eval(line, None, Some(&locals)).unwrap();
         }
     });
 }

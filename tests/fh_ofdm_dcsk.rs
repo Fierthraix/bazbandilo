@@ -1,3 +1,5 @@
+use std::ffi::CString;
+
 use bazbandilo::fh_ofdm_dcsk::tx_fh_ofdm_dcsk_signal;
 use bazbandilo::Bit;
 

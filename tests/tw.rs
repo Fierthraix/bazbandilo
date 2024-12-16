@@ -48,9 +48,9 @@ fn energy_detect<I: Iterator<Item = Complex<f64>>>(signal: I) -> f64 {
     10f64 * (signal.map(|s_i| s_i.norm_sqr()).sum::<f64>()).log10()
 }
 
-const NUM_ATTEMPTS: usize = 10_000;
+// const NUM_ATTEMPTS: usize = 10_000;
 // const NUM_ATTEMPTS: usize = 1000;
-// const NUM_ATTEMPTS: usize = 75;
+const NUM_ATTEMPTS: usize = 75;
 
 macro_rules! DetectorTest {
     ($tx_fn:expr, $snrs:expr, $pow2:expr) => {{

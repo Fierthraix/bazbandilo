@@ -1,3 +1,5 @@
+use std::ffi::CString;
+
 use bazbandilo::cdma::{rx_cdma_bpsk_signal, tx_cdma_bpsk_signal};
 use bazbandilo::hadamard::HadamardMatrix;
 use bazbandilo::iter::Iter;
@@ -80,44 +82,48 @@ fn python_plotz() -> PyResult<()> {
     let t_step: f64 = 1f64 / (samp_rate as f64);
 
     Python::with_gil(|py| {
-        let plt = py.import_bound("matplotlib.pyplot")?;
-        let np = py.import_bound("numpy")?;
-        let locals = [("np", np), ("plt", plt)].into_py_dict_bound(py);
+        let plt = py.import("matplotlib.pyplot")?;
+        let np = py.import("numpy")?;
+        let locals = [("np", np), ("plt", plt)].into_py_dict(py)?;
 
         locals.set_item("data_tx", data_tx)?;
         locals.set_item("bpsk_tx", bpsk_tx)?;
         locals.set_item("cdma_tx", cdma_tx)?;
         locals.set_item("dt", t_step)?;
 
-        let x = py.eval_bound("lambda s, dt: [dt * i for i in range(len(s))]", None, None)?;
+        let x = py.eval(
+            c!("lambda s, dt: [dt * i for i in range(len(s))]"),
+            None,
+            None,
+        )?;
         locals.set_item("x", x)?;
 
-        let (fig, axes): (&PyAny, &PyAny) = py
-            .eval_bound("plt.subplots(4)", None, Some(&locals))?
+        let (fig, axes): (PyObject, PyObject) = py
+            .eval(c!("plt.subplots(4)"), None, Some(&locals))?
             .extract()?;
         locals.set_item("fig", fig)?;
         locals.set_item("axes", axes)?;
 
         for line in [
-            "axes[0].plot(x(data_tx, dt), data_tx, label='DATA: [1 1 0 0 1]')",
-            "axes[1].plot(x(bpsk_tx, dt), bpsk_tx, label='BPSK: (2.5kHz, 1kHz Data Rate)')",
-            "axes[2].plot(x(cdma_tx, dt), cdma_tx, label='CDMA: 8kHz Chip Rate')",
+            c!("axes[0].plot(x(data_tx, dt), data_tx, label='DATA: [1 1 0 0 1]')"),
+            c!("axes[1].plot(x(bpsk_tx, dt), bpsk_tx, label='BPSK: (2.5kHz, 1kHz Data Rate)')"),
+            c!("axes[2].plot(x(cdma_tx, dt), cdma_tx, label='CDMA: 8kHz Chip Rate')"),
         ] {
-            py.eval_bound(line, None, Some(&locals))?;
+            py.eval(line, None, Some(&locals))?;
         }
 
         locals.set_item("samp_rate", samp_rate)?;
         locals.set_item("freq", carrier_freq)?;
 
         for line in [
-            "plt.psd(bpsk_tx, Fs=samp_rate, Fc=freq)",
-            "plt.psd(cdma_tx, Fs=samp_rate, Fc=freq)",
-            "[x.legend() for x in axes[:-1]]",
-            "fig.set_size_inches(16, 9)",
-            // "plt.show()",
-            "fig.savefig('/tmp/cdma_works.png', dpi=300)",
+            c!("plt.psd(bpsk_tx, Fs=samp_rate, Fc=freq)"),
+            c!("plt.psd(cdma_tx, Fs=samp_rate, Fc=freq)"),
+            c!("[x.legend() for x in axes[:-1]]"),
+            c!("fig.set_size_inches(16, 9)"),
+            // c!("plt.show()"),
+            c!("fig.savefig('/tmp/cdma_works.png', dpi=300)"),
         ] {
-            py.eval_bound(line, None, Some(&locals))?;
+            py.eval(line, None, Some(&locals))?;
         }
 
         Ok(())

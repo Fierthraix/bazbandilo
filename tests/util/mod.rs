@@ -1,8 +1,15 @@
 #![allow(dead_code, unused_macros)]
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
+use std::ffi::CString;
 
 pub mod ber;
+
+macro_rules! c {
+    ($str:expr) => {{
+        &CString::new($str).unwrap()
+    }};
+}
 
 macro_rules! energy_samples_bits {
     ($tx_fn:expr, $min_samples:expr) => {{
@@ -42,10 +49,13 @@ macro_rules! eb {
 
 macro_rules! init_matplotlib {
     ($py: expr) => {{
-        let matplotlib = $py.import_bound("matplotlib").unwrap();
-        let plt = $py.import_bound("matplotlib.pyplot").unwrap();
-        let locals = [("matplotlib", matplotlib), ("plt", plt)].into_py_dict_bound($py);
-        $py.eval_bound("matplotlib.use('agg')", None, Some(&locals))
+        let matplotlib = $py.import("matplotlib").unwrap();
+        let plt = $py.import("matplotlib.pyplot").unwrap();
+        let locals = [("matplotlib", matplotlib), ("plt", plt)]
+            .into_py_dict($py)
+            .unwrap();
+        // let asdf = CString::new().unwrap();
+        $py.eval(c!("matplotlib.use('agg')"), None, Some(&locals))
             .unwrap();
         locals
     }};
@@ -58,20 +68,22 @@ macro_rules! plot {
 
             locals.set_item("x", &$x).unwrap();
             locals.set_item("y", &$y).unwrap();
-            let (fig, axes): (&PyAny, &PyAny) = py
-                .eval_bound("plt.subplots(1)", None, Some(&locals))
+            // let fig_axes: (&PyObject, &PyObject) = py
+            let (fig, axes): (PyObject, PyObject) = py
+                // let fig_axes: PyObject = py
+                .eval(c!("plt.subplots(1)"), None, Some(&locals))
                 .unwrap()
                 .extract()
                 .unwrap();
             locals.set_item("fig", fig).unwrap();
             locals.set_item("axes", axes).unwrap();
             for line in [
-                "fig.set_size_inches(16, 9)",
-                "axes.plot(x, y)",
-                &format!("fig.savefig('{}')", $name),
-                "plt.close('all')",
+                c!("fig.set_size_inches(16, 9)"),
+                c!("axes.plot(x, y)"),
+                c!(format!("fig.savefig('{}')", $name)),
+                c!("plt.close('all')"),
             ] {
-                py.eval_bound(line, None, Some(&locals)).unwrap();
+                py.eval(line, None, Some(&locals)).unwrap();
             }
         })
     };
@@ -85,26 +97,26 @@ macro_rules! plot {
             locals.set_item("x", &$x).unwrap();
             locals.set_item("y1", &$y1).unwrap();
             locals.set_item("y2", &$y2).unwrap();
-            let (fig, axes): (&PyAny, &PyAny) = py
-                .eval_bound("plt.subplots(1)", None, Some(&locals))
+            let (fig, axes): (PyObject, PyObject) = py
+                .eval(c!("plt.subplots(1)"), None, Some(&locals))
                 .unwrap()
                 .extract()
                 .unwrap();
             locals.set_item("fig", fig).unwrap();
             locals.set_item("axes", axes).unwrap();
-            py.eval_bound("fig.set_size_inches(16, 9)", None, Some(&locals))
+            py.eval(c!("fig.set_size_inches(16, 9)"), None, Some(&locals))
                 .unwrap();
             if $log {
-                py.eval_bound("axes.set_yscale('log')", None, Some(&locals))
+                py.eval(c!("axes.set_yscale('log')"), None, Some(&locals))
                     .unwrap();
             }
             for line in [
-                "axes.plot(x, y1)",
-                "axes.plot(x, y2)",
-                &format!("fig.savefig('{}')", $name),
-                "plt.close('all')",
+                c!("axes.plot(x, y1)"),
+                c!("axes.plot(x, y2)"),
+                c!(format!("fig.savefig('{}')", $name)),
+                c!("plt.close('all')"),
             ] {
-                py.eval_bound(line, None, Some(&locals)).unwrap();
+                py.eval(line, None, Some(&locals)).unwrap();
             }
         })
     };
@@ -132,9 +144,9 @@ macro_rules! ber_plot {
             py.eval_bound("axes.set_yscale('log')", None, Some(&locals))
                 .unwrap();
             for line in [
-                "axes.plot(x, y)",
-                &format!("fig.savefig('{}')", $name),
-                "plt.close('all')",
+                c!("axes.plot(x, y)"),
+                c!(format!("fig.savefig('{}')", $name)),
+                c!("plt.close('all')"),
             ] {
                 py.eval_bound(line, None, Some(&locals)).unwrap();
             }
@@ -149,21 +161,21 @@ macro_rules! dot_plot {
 
             locals.set_item("i", &$i).unwrap();
             locals.set_item("q", &$q).unwrap();
-            let (fig, axes): (&PyAny, &PyAny) = py
-                .eval_bound("plt.subplots(1)", None, Some(&locals))
+            let (fig, axes): (PyObject, PyObject) = py
+                .eval(c!("plt.subplots(1)"), None, Some(&locals))
                 .unwrap()
                 .extract()
                 .unwrap();
             locals.set_item("fig", fig).unwrap();
             locals.set_item("axes", axes).unwrap();
-            py.eval_bound("fig.set_size_inches(16, 9)", None, Some(&locals))
+            py.eval(c!("fig.set_size_inches(16, 9)"), None, Some(&locals))
                 .unwrap();
             for line in [
-                "axes.plot(i, q, marker='.', linestyle='None')",
-                &format!("fig.savefig('{}')", $name),
-                "plt.close('all')",
+                c!("axes.plot(i, q, marker='.', linestyle='None')"),
+                c!(format!("fig.savefig('{}')", $name)),
+                c!("plt.close('all')"),
             ] {
-                py.eval_bound(line, None, Some(&locals)).unwrap();
+                py.eval(line, None, Some(&locals)).unwrap();
             }
         })
     };
@@ -191,27 +203,29 @@ macro_rules! error {
 
 pub fn fit_erfc(x: &[f64], y: &[f64]) -> (f64, f64, f64, f64) {
     Python::with_gil(|py| {
-        let scipy = PyModule::import_bound(py, "scipy")?;
-        let locals = [("scipy", scipy)].into_py_dict_bound(py);
+        let scipy = PyModule::import(py, "scipy")?;
+        let locals = [("scipy", scipy)].into_py_dict(py)?;
 
         locals.set_item("x", x)?;
         locals.set_item("y", y)?;
 
-        let erfc: Py<PyAny> = PyModule::from_code_bound(
+        let erfc: Py<PyAny> = PyModule::from_code(
             py,
-            "def erfc(x, a, b, z, f):
+            &CString::new(
+                "def erfc(x, a, b, z, f):
                 from scipy.special import erfc
                 return a * erfc((x - z) * f) + b",
-            "",
-            "",
+            )?,
+            &CString::new("")?,
+            &CString::new("")?,
         )?
         .getattr("erfc")?
         .into();
         locals.set_item("erfc", erfc)?;
 
         let popt: Vec<f64> = py
-            .eval_bound(
-                "scipy.optimize.curve_fit(erfc, x, y, maxfev=8_000_000)[0]",
+            .eval(
+                &CString::new("scipy.optimize.curve_fit(erfc, x, y, maxfev=8_000_000)[0]")?,
                 None,
                 Some(&locals),
             )?

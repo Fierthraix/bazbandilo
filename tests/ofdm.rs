@@ -1,3 +1,5 @@
+use std::ffi::CString;
+
 use bazbandilo::ofdm::{rx_ofdm_signal, tx_ofdm_signal};
 use bazbandilo::psk::{rx_qpsk_signal, tx_qpsk_signal};
 use bazbandilo::Bit;
@@ -27,10 +29,10 @@ fn py_version() -> PyResult<()> {
         rx_qpsk_signal(rx_ofdm_signal(tx_sig.iter().cloned(), scs, pilots)).collect();
 
     Python::with_gil(|py| {
-        let pathlib = py.import_bound("pathlib")?;
-        let importlib = py.import_bound("importlib")?;
-        let plt = py.import_bound("matplotlib.pyplot")?;
-        let np = py.import_bound("numpy")?;
+        let pathlib = py.import("pathlib")?;
+        let importlib = py.import("importlib")?;
+        let plt = py.import("matplotlib.pyplot")?;
+        let np = py.import("numpy")?;
 
         let locals = [
             ("importlib", importlib),
@@ -38,19 +40,19 @@ fn py_version() -> PyResult<()> {
             ("np", np),
             ("plt", plt),
         ]
-        .into_py_dict_bound(py);
+        .into_py_dict(py)?;
 
         locals.set_item("tx_sig_rs", tx_sig.clone())?;
 
-        let mod_path = py.eval_bound(
-            "pathlib.Path.home() / 'projects' / 'comms_py' / 'ofdm_trx5.py'",
+        let mod_path = py.eval(
+            c!("pathlib.Path.home() / 'projects' / 'comms_py' / 'ofdm_trx5.py'"),
             None,
             Some(&locals),
         )?;
         locals.set_item("mod_path", mod_path)?;
 
-        let comms_py = py.eval_bound(
-            "importlib.machinery.SourceFileLoader(mod_path.name, str(mod_path)).load_module()",
+        let comms_py = py.eval(
+            c!("importlib.machinery.SourceFileLoader(mod_path.name, str(mod_path)).load_module()"),
             None,
             Some(&locals),
         )?;
@@ -58,29 +60,29 @@ fn py_version() -> PyResult<()> {
 
         locals.set_item("data", data.clone())?;
         let py_tx_sig_re: Vec<f64> = py
-            .eval_bound(
-                "list(np.array(comms_py.tx_ofdm(data)).real)",
+            .eval(
+                c!("list(np.array(comms_py.tx_ofdm(data)).real)"),
                 None,
                 Some(&locals),
             )?
             .extract()?;
-        let py_tx_sig_im: Vec<f64> /*&pyo3::PyAny*/ = py.eval_bound(
-            "list(np.array(comms_py.tx_ofdm(data)).imag)",
+        let py_tx_sig_im: Vec<f64> /*&pyo3::PyAny*/ = py.eval(
+            c!("list(np.array(comms_py.tx_ofdm(data)).imag)"),
             None,
             Some(&locals),
         )?.extract()?;
 
         let py_rx_dat: Vec<bool> = py
-            .eval_bound(
-                "list(map(bool, comms_py.rx_ofdm(comms_py.tx_ofdm(data))))",
+            .eval(
+                c!("list(map(bool, comms_py.rx_ofdm(comms_py.tx_ofdm(data))))"),
                 None,
                 Some(&locals),
             )?
             .extract()?;
 
         let py_rx_dat_rs_py: Vec<bool> = py
-            .eval_bound(
-                "list(map(bool, comms_py.rx_ofdm(tx_sig_rs)))",
+            .eval(
+                c!("list(map(bool, comms_py.rx_ofdm(tx_sig_rs)))"),
                 None,
                 Some(&locals),
             )?

@@ -364,16 +364,16 @@ pub fn ssca_py(
     map_output: bool,
 ) -> Bound<'_, PyArray2<Complex<f64>>> {
     if map_output {
-        ssca_mapped(&s, n, np).into_pyarray_bound(py)
+        ssca_mapped(&s, n, np).into_pyarray(py)
     } else {
-        ssca_base(&s, n, np).into_pyarray_bound(py)
+        ssca_base(&s, n, np).into_pyarray(py)
     }
 }
 
 #[pyfunction]
 pub fn random_data(py: Python<'_>, num_bits: usize) -> Bound<'_, PyArray1<Bit>> {
     let mut rng = rand::thread_rng();
-    PyArray1::from_iter_bound(py, (0..num_bits).map(|_| rng.gen::<Bit>()))
+    PyArray1::from_iter(py, (0..num_bits).map(|_| rng.gen::<Bit>()))
 }
 
 #[pyfunction]

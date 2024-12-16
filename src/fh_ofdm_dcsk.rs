@@ -78,9 +78,11 @@ pub fn rx_fh_ofdm_dcsk_signal<I: Iterator<Item = Complex<f64>>>(
     let mut fft_scratch = vec![Complex::zero(); fft.get_inplace_scratch_len()];
 
     signal
-        .chunks(NUM_SUBCARRIERS + CP_LEN)
+        // .chunks(NUM_SUBCARRIERS + CP_LEN)
+        .chunks(NUM_SUBCARRIERS)
         .flat_map(move |chunk| {
-            let mut buffer: Vec<Complex<f64>> = Vec::from(&chunk[CP_LEN..]); // CP Removal
+            // let mut buffer: Vec<Complex<f64>> = Vec::from(&chunk[CP_LEN..]); // CP Removal
+            let mut buffer: Vec<Complex<f64>> = Vec::from(&chunk[..]); // CP Removal
 
             fft.process_with_scratch(&mut buffer, &mut fft_scratch); // IFFT
             let demoded = fftshift(&buffer);
