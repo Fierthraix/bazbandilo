@@ -48,3 +48,6 @@ rmp-serde = "1.3"
 
 [profile.test]
 opt-level = 3
+codegen-units = 1
+lto = true
+panic = "abort"
