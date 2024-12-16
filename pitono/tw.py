@@ -5,6 +5,7 @@ from foo import get_cycles, log_regress
 from argparse import ArgumentParser, Namespace
 import concurrent.futures
 from functools import partial
+import gc
 import numpy as np
 import pandas as pd
 from typing import Dict, List
@@ -44,6 +45,7 @@ def parse_results(
     dx["youden_js"] = youden_js
     dx["df"] = dfs
     mod_res["results"] = dx
+    gc.collect()
     return mod_res
 
 
@@ -126,6 +128,8 @@ if __name__ == "__main__":
         with Path(args.tw_file).open("r") as f:
             results = json.load(f)
 
+    gc.collect()
+
     # Parse and Log Regress results.
     parse = partial(parse_results, num_regressions=args.log_regressions)
     # regressed: List[Dict[str, object]] = list(map(parse, results))
@@ -133,6 +137,9 @@ if __name__ == "__main__":
         "Logistic Regresstion"
     ) as _:
         regressed: List[Dict[str, object]] = list(p.map(parse, results))
+
+    del results
+    gc.collect()
 
     with timeit("Plotting") as _:
 

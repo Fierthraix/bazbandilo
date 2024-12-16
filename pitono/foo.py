@@ -5,6 +5,7 @@ from ber import ber_bpsk
 from argparse import ArgumentParser, Namespace
 import concurrent.futures
 from cycler import cycler
+import gc
 from functools import partial
 import numpy as np
 from sklearn.linear_model import LogisticRegression
@@ -122,7 +123,7 @@ def plot_pd_vs_ber(
 ):
     try:
         mod_ber = next(b for b in bers if b["name"] == modulation["name"])
-    except TypeError:
+    except (TypeError, StopIteration):
         print(f"BER for {modulation["name"]} not found.")
         return
     fig, ax = plt.subplots()
@@ -138,13 +139,16 @@ def plot_pd_vs_ber(
 
     linestyles = ["solid", "dashed", "dashdot", "dotted"]
     for detector, style in zip(DETECTORS, linestyles):
-        pd_ax.plot(
-            db(modulation["snrs"]),
-            modulation[detector]["youden_js"],
-            color="Blue",
-            linestyle=style,
-            label=detector,
-        )
+        try:
+            pd_ax.plot(
+                db(modulation["snrs"]),
+                modulation[detector]["youden_js"],
+                color="Blue",
+                linestyle=style,
+                label=detector,
+            )
+        except KeyError:
+            continue
     pd_ax.set_ylim([0, 1.1])
     # pd_ax.plot(-12.0556, good_pd, "bo")
     # pd_ax.axhline(good_pd, color='Blue', ls='--', label=f'Acceptable ℙd ({good_pd})')
@@ -190,10 +194,12 @@ def parse_results(
                 dfs.append(
                     pd.DataFrame(columns=["x", "y", "proba", "tpr", "fpr", "youden_j"])
                 )
-                youden_js.append(0)
+                # youden_js.append(0)
+                youden_js.append(1)
         dx["youden_js"] = youden_js
         dx["df"] = dfs
         mod_res[dx_result["kind"]] = dx
+    gc.collect()
     return mod_res
 
 
@@ -297,7 +303,10 @@ def plot_λ_vs_snr(
     fig, ax = plt.subplots()
     ax.set_prop_cycle(get_cycles(len(results_object)))
     for modulation in results_object:
-        p = modulation[kind]["df"]
+        try:
+            p = modulation[kind]["df"]
+        except KeyError:
+            continue
         λ0s = []
         for i, snr in enumerate(modulation["snrs"]):
             try:
@@ -365,10 +374,14 @@ if __name__ == "__main__":
                 # results = umsgpack.load(f, raw=True)
             results = filter_results(results, regex)
 
+        gc.collect()
+
         with Path(args.ber_file).open("r") as f:
             bers = json.load(f)
             # bers = umsgpack.load(f, raw=True)
         bers = filter_results(bers, regex)
+
+        gc.collect()
 
     if not args.bers_only:
         # Parse and Log Regress results.
@@ -378,6 +391,8 @@ if __name__ == "__main__":
             "Logistic Regresstion"
         ) as _:
             regressed: List[Dict[str, object]] = list(p.map(parse, results))
+        del results
+        gc.collect()
 
         with timeit("Plotting") as _:
 
