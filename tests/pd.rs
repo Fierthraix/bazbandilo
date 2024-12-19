@@ -4,6 +4,7 @@ use std::io::{BufWriter, Write};
 use std::sync::Mutex;
 
 use kdam::{par_tqdm, BarExt};
+use ndarray::s;
 use num::Zero;
 use num_complex::Complex;
 use numpy::ndarray::{Array2, Axis};
@@ -22,6 +23,7 @@ use bazbandilo::{
     csk::tx_csk_signal,
     css::tx_css_signal,
     dcsk::{tx_dcsk_signal, tx_qcsk_signal},
+    fam::fam,
     fh_ofdm_dcsk::tx_fh_ofdm_dcsk_signal,
     fsk::tx_bfsk_signal,
     hadamard::HadamardMatrix,
@@ -34,11 +36,31 @@ use bazbandilo::{
 };
 
 fn dcs_detect(sxf: &Array2<Complex<f64>>) -> f64 {
-    let top = sxf.map(Complex::<f64>::norm_sqr).sum_axis(Axis(1));
     let middle: usize = sxf.shape()[1] / 2;
-    let bot = sxf.column(middle).map(Complex::<f64>::norm_sqr);
+    let left = sxf.slice(s![.., ..middle]);
+    let right = sxf.slice(s![.., middle + 1..]);
 
-    let lambda = (top / bot)
+    let left = left.map(Complex::<f64>::norm_sqr).sum_axis(Axis(1));
+    let right = right.map(Complex::<f64>::norm_sqr).sum_axis(Axis(1));
+
+    let lambda = left
+        .into_iter()
+        .chain(right)
+        .map(|x| if x.is_normal() { x } else { 0f64 })
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or_else(|| panic!("{}, {}", a, b)))
+        .unwrap();
+
+    10f64 * lambda.log10()
+}
+
+fn dcs_detect_fam(sxf: &Array2<Complex<f64>>) -> f64 {
+    // let sxf = sxf.slice(s![1.., ..]);
+    let top = sxf
+        .slice(s![1.., ..])
+        .map(Complex::<f64>::norm_sqr)
+        .sum_axis(Axis(0));
+
+    let lambda = top
         .into_iter()
         .map(|x| if x.is_normal() { x } else { 0f64 })
         .max_by(|a, b| a.partial_cmp(b).unwrap_or_else(|| panic!("{}, {}", a, b)))
@@ -103,7 +125,8 @@ enum Detector {
     Energy,
     MaxCut,
     Dcs,
-    NormalTest,
+    DcsFam,
+    MaxCutFam,
 }
 
 impl Detector {
@@ -112,7 +135,8 @@ impl Detector {
             Detector::Energy => "Energy Detector",
             Detector::MaxCut => "Max Cut Detector",
             Detector::Dcs => "DCS Detector",
-            Detector::NormalTest => "Normal Test Detector",
+            Detector::DcsFam => "DcsFam Detector",
+            Detector::MaxCutFam => "MaxCutFam Detector",
         }
     }
     fn iter() -> impl Iterator<Item = Detector> {
@@ -120,7 +144,8 @@ impl Detector {
             Detector::Energy,
             Detector::MaxCut,
             Detector::Dcs,
-            Detector::NormalTest,
+            Detector::DcsFam,
+            Detector::MaxCutFam,
         ]
         .into_iter()
     }
@@ -138,6 +163,8 @@ fn run_detectors<I: Iterator<Item = Complex<f64>>>(signal: I) -> Vec<DetectorOut
     let sxf = ssca_base(&chan_signal, n, np);
     let sxf_mapped = ssca_mapper(&sxf);
 
+    let sxf_fam = fam(&chan_signal, n + np, np);
+
     vec![
         DetectorOutput {
             kind: Detector::Energy,
@@ -150,11 +177,18 @@ fn run_detectors<I: Iterator<Item = Complex<f64>>>(signal: I) -> Vec<DetectorOut
         DetectorOutput {
             kind: Detector::Dcs,
             λ: dcs_detect(&sxf_mapped),
-            // λ: dcs_detect(&sxf),
+        },
+        // DetectorOutput {
+        //     kind: Detector::NormalTest,
+        //     λ: normal_detect(&chan_signal),
+        // },
+        DetectorOutput {
+            kind: Detector::DcsFam,
+            λ: dcs_detect_fam(&sxf_fam),
         },
         DetectorOutput {
-            kind: Detector::NormalTest,
-            λ: normal_detect(&chan_signal),
+            kind: Detector::MaxCutFam,
+            λ: max_cut_detect(&sxf_fam),
         },
     ]
 }
@@ -222,8 +256,9 @@ fn remap_results(λs: &[Vec<Vec<DetectorOutput>>], kind: &str) -> Vec<Vec<f64>> 
 
 const NUM_SAMPLES: usize = 65536;
 
-const NUM_ATTEMPTS: usize = 1000;
+// const NUM_ATTEMPTS: usize = 1000;
 // const NUM_ATTEMPTS: usize = 20;
+const NUM_ATTEMPTS: usize = 150;
 
 macro_rules! DetectorTest {
     ($name:expr, $tx_fn:expr, $snrs:expr) => {{
@@ -303,6 +338,7 @@ macro_rules! DetectorTest {
 #[test]
 fn main() {
     // let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 15).collect();
+    // let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 25).collect();
     let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 150).collect();
 
     let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
