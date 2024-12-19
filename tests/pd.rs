@@ -27,11 +27,11 @@ use bazbandilo::{
     fh_ofdm_dcsk::tx_fh_ofdm_dcsk_signal,
     fsk::tx_bfsk_signal,
     hadamard::HadamardMatrix,
+    iter::Iter,
     linspace,
     ofdm::tx_ofdm_signal,
     psk::{tx_bpsk_signal, tx_qpsk_signal},
     qam::tx_qam_signal,
-    ssca::{ssca_base, ssca_mapper},
     undb, Bit,
 };
 
@@ -125,8 +125,6 @@ enum Detector {
     Energy,
     MaxCut,
     Dcs,
-    DcsFam,
-    MaxCutFam,
 }
 
 impl Detector {
@@ -135,33 +133,17 @@ impl Detector {
             Detector::Energy => "Energy Detector",
             Detector::MaxCut => "Max Cut Detector",
             Detector::Dcs => "DCS Detector",
-            Detector::DcsFam => "DcsFam Detector",
-            Detector::MaxCutFam => "MaxCutFam Detector",
         }
     }
     fn iter() -> impl Iterator<Item = Detector> {
-        [
-            Detector::Energy,
-            Detector::MaxCut,
-            Detector::Dcs,
-            Detector::DcsFam,
-            Detector::MaxCutFam,
-        ]
-        .into_iter()
+        [Detector::Energy, Detector::MaxCut, Detector::Dcs].into_iter()
     }
 }
 
 fn run_detectors<I: Iterator<Item = Complex<f64>>>(signal: I) -> Vec<DetectorOutput> {
     let np = 64;
-    // let np = 128;
-    // let np = 256;
     let n = 4096;
-    // let n = 8192;
-    // let n = 32768;
     let chan_signal: Vec<Complex<f64>> = signal.take(n + np).collect();
-    // let chan_signal: Vec<Complex<f64>> = signal.collect();
-    let sxf = ssca_base(&chan_signal, n, np);
-    let sxf_mapped = ssca_mapper(&sxf);
 
     let sxf_fam = fam(&chan_signal, n + np, np);
 
@@ -172,24 +154,16 @@ fn run_detectors<I: Iterator<Item = Complex<f64>>>(signal: I) -> Vec<DetectorOut
         },
         DetectorOutput {
             kind: Detector::MaxCut,
-            λ: max_cut_detect(&sxf),
+            λ: max_cut_detect(&sxf_fam),
         },
         DetectorOutput {
             kind: Detector::Dcs,
-            λ: dcs_detect(&sxf_mapped),
+            λ: dcs_detect_fam(&sxf_fam),
         },
         // DetectorOutput {
         //     kind: Detector::NormalTest,
         //     λ: normal_detect(&chan_signal),
         // },
-        DetectorOutput {
-            kind: Detector::DcsFam,
-            λ: dcs_detect_fam(&sxf_fam),
-        },
-        DetectorOutput {
-            kind: Detector::MaxCutFam,
-            λ: max_cut_detect(&sxf_fam),
-        },
     ]
 }
 
@@ -256,9 +230,8 @@ fn remap_results(λs: &[Vec<Vec<DetectorOutput>>], kind: &str) -> Vec<Vec<f64>> 
 
 const NUM_SAMPLES: usize = 65536;
 
-// const NUM_ATTEMPTS: usize = 1000;
+const NUM_ATTEMPTS: usize = 1000;
 // const NUM_ATTEMPTS: usize = 20;
-const NUM_ATTEMPTS: usize = 150;
 
 macro_rules! DetectorTest {
     ($name:expr, $tx_fn:expr, $snrs:expr) => {{
@@ -352,6 +325,71 @@ fn main() {
 
     let harness = [
         // PSK
+        DetectorTest!("BPSK", |m| tx_bpsk_signal(m).inflate(64), snrs),
+        DetectorTest!("QPSK", |m| tx_qpsk_signal(m).inflate(64), snrs),
+        // CDMA
+        DetectorTest!(
+            "CDMA-BPSK-16",
+            |m| tx_cdma_bpsk_signal(m, key_16).inflate(4),
+            snrs
+        ),
+        DetectorTest!(
+            "CDMA-QPSK-16",
+            |m| tx_cdma_qpsk_signal(m, key_16).inflate(4),
+            snrs
+        ),
+        // DetectorTest!("CDMA-BPSK-32", |m| tx_cdma_bpsk_signal(m, key_32), snrs),
+        DetectorTest!(
+            "CDMA-QPSK-32",
+            |m| tx_cdma_qpsk_signal(m, key_32).inflate(2),
+            snrs
+        ),
+        // DetectorTest!("CDMA-BPSK-64", |m| tx_cdma_bpsk_signal(m, key_64), snrs),
+        DetectorTest!("CDMA-QPSK-64", |m| tx_cdma_qpsk_signal(m, key_64), snrs),
+        // QAM
+        // DetectorTest!("4QAM", |m| tx_qam_signal(m, 4), snrs),
+        DetectorTest!("16QAM", |m| tx_qam_signal(m, 16).inflate(4), snrs),
+        DetectorTest!("64QAM", |m| tx_qam_signal(m, 64), snrs),
+        // BFSK
+        DetectorTest!("BFSK-16", |m| tx_bfsk_signal(m, 16).inflate(4), snrs),
+        DetectorTest!("BFSK-32", |m| tx_bfsk_signal(m, 32).inflate(2), snrs),
+        DetectorTest!("BFSK-64", |m| tx_bfsk_signal(m, 64), snrs),
+        // OFDM
+        DetectorTest!(
+            "OFDM-BPSK-16",
+            |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 0).inflate(4),
+            snrs
+        ),
+        DetectorTest!(
+            "OFDM-QPSK-16",
+            |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 0).inflate(4),
+            snrs
+        ),
+        DetectorTest!(
+            "OFDM-BPSK-64",
+            |m| tx_ofdm_signal(tx_bpsk_signal(m), 64, 0),
+            snrs
+        ),
+        DetectorTest!(
+            "OFDM-QPSK-64",
+            |m| tx_ofdm_signal(tx_qpsk_signal(m), 64, 0),
+            snrs
+        ),
+        // Chirp Spread Spectrum
+        DetectorTest!("CSS-16", |m| tx_css_signal(m, 16).inflate(4), snrs),
+        DetectorTest!("CSS-64", |m| tx_css_signal(m, 64), snrs),
+        // DetectorTest!("CSS-128", |m| tx_css_signal(m, 128), snrs),
+        // CSK
+        DetectorTest!("CSK", |m| tx_csk_signal(m).inflate(64), snrs),
+        DetectorTest!("DCSK", |m| tx_dcsk_signal(m).inflate(32), snrs),
+        DetectorTest!("QCSK", |m| tx_qcsk_signal(m).inflate(32), snrs),
+        // FH-OFDM-DCSK
+        DetectorTest!("FH-OFDM-DCSK", tx_fh_ofdm_dcsk_signal, snrs),
+    ];
+
+    /*
+    let harness = [
+        // PSK
         DetectorTest!("BPSK", tx_bpsk_signal, snrs),
         DetectorTest!("QPSK", tx_qpsk_signal, snrs),
         // CDMA
@@ -401,6 +439,7 @@ fn main() {
         // FH-OFDM-DCSK
         DetectorTest!("FH-OFDM-DCSK", tx_fh_ofdm_dcsk_signal, snrs),
     ];
+    */
 
     let results: Vec<ModulationDetectorResults> = {
         let mut results = Vec::with_capacity(harness.len());
