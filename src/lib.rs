@@ -14,6 +14,7 @@ pub mod chaos;
 pub mod csk;
 pub mod css;
 pub mod dcsk;
+pub mod fam;
 pub mod fh;
 pub mod fh_ofdm_dcsk;
 mod filters;
@@ -32,6 +33,7 @@ use crate::{
     csk::{rx_csk_signal, tx_csk_signal},
     // css::tx_css_signal,
     dcsk::{rx_dcsk_signal, rx_qcsk_signal, tx_dcsk_signal, tx_qcsk_signal},
+    fam::{fam, fam_sans_psd},
     fh_ofdm_dcsk::{rx_fh_ofdm_dcsk_signal, tx_fh_ofdm_dcsk_signal},
     fsk::{rx_bfsk_signal, tx_bfsk_signal},
     hadamard::HadamardMatrix,
@@ -371,6 +373,23 @@ pub fn ssca_py(
 }
 
 #[pyfunction]
+#[pyo3(name = "fam", signature=(s, n=None, np=256, psd=false))]
+pub fn fam_py(
+    py: Python<'_>,
+    s: Vec<Complex<f64>>,
+    n: Option<usize>,
+    np: usize,
+    psd: bool,
+) -> Bound<'_, PyArray2<Complex<f64>>> {
+    let n = n.unwrap_or(s.len());
+    if psd {
+        fam(&s, n, np).into_pyarray(py)
+    } else {
+        fam_sans_psd(&s, n, np).into_pyarray(py)
+    }
+}
+
+#[pyfunction]
 pub fn random_data(py: Python<'_>, num_bits: usize) -> Bound<'_, PyArray1<Bit>> {
     let mut rng = rand::thread_rng();
     PyArray1::from_iter(py, (0..num_bits).map(|_| rng.gen::<Bit>()))
@@ -594,6 +613,7 @@ fn module_with_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(energy_real, m)?)?;
     m.add_function(wrap_pyfunction!(energy_complex, m)?)?;
     m.add_function(wrap_pyfunction!(ssca_py, m)?)?;
+    m.add_function(wrap_pyfunction!(fam_py, m)?)?;
     m.add_function(wrap_pyfunction!(max_cut_detector, m)?)?;
     m.add_function(wrap_pyfunction!(max_cut_detector_sxf, m)?)?;
     m.add_function(wrap_pyfunction!(dcs_detector, m)?)?;
