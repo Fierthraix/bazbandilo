@@ -1,15 +1,69 @@
 #!/usr/bin/env python
-from foo import filter_results, log_regress, DETECTORS, parse_results
-from util import db, timeit
+from foo import filter_results, parse_results
+from util import db, timeit, undb
 
-from argparse import ArgumentParser, Namespace, ArgumentTypeError
+from argparse import ArgumentParser, Namespace
 import concurrent.futures
 from functools import partial
 import gc
 import numpy as np
 import re
 from scipy.stats import rv_histogram
-from typing import Dict, List, Tuple
+from typing import Dict, List
+
+
+def get_closest_index(vec: List[object], index: object) -> int:
+    error = np.abs(np.array(vec) - index)
+    return list(error).index(min(error))
+
+
+def plot_specific_snrs(
+    modulation: List[Dict[str, object]],
+    snrs: List[float],
+    n: int = 16,
+    save: bool = False,
+):
+    n = len(snrs)
+    m = int(np.sqrt(n))
+    assert m**2 == n
+
+    fig, axs = plt.subplots(m, m)
+
+    binification = 128
+
+    indices: List[int] = [get_closest_index(modulation["snrs"], snr) for snr in snrs]
+
+    for (i, idx), snr in zip(enumerate(indices), snrs):
+        h0s = modulation["Energy"]["h0_λs"][idx]
+        h1s = modulation["Energy"]["h1_λs"][idx]
+
+        xmin = min(h0s + h1s)
+        xmax = max(h0s + h1s)
+        x = np.linspace(xmin, xmax, binification)
+        # x = np.linspace(35, 100, binification)
+        h0_pdf = rv_histogram(np.histogram(h0s, bins=binification)).pdf(x)
+        h1_pdf = rv_histogram(np.histogram(h1s, bins=binification)).pdf(x)
+
+        ax = axs[i // m, i % m]
+        ax.plot(x, h0_pdf, label="$H_0$ case")
+        ax.plot(x, h1_pdf, label="$H_1$ case")
+
+        df = modulation["Energy"]["df"][idx]
+        cut_off = (
+            df.sort_values(by="youden_j", ascending=False, ignore_index=True).iloc[0].x
+        )
+        ax.axvline(cut_off, color="k", ls="--")
+
+        ax.set_title(f"SNR={int(db(snr))}dB")
+        ax.set_xlabel(r"$\lambda$")
+        ax.set_ylabel(r"$\mathbb{P}(\lambda)$")
+        ax.legend(loc="best")
+        ax.grid(True)
+    plt.tight_layout()
+
+    if save:
+        fig.set_size_inches(16, 9)
+        fig.savefig(f"/tmp/pdfs_energy_{modulation["name"]}.png")
 
 
 def plot_some_pdfs(
@@ -58,7 +112,11 @@ def plot_some_pdfs(
         ax.legend(loc="best")
         ax.grid(True)
     fig.suptitle(f"{modulation["name"]} - PDF of $H_0$ and $H_1$ cases")
-    # plt.tight_layout()
+    plt.tight_layout()
+
+    if save:
+        fig.set_size_inches(16, 9)
+        fig.savefig(f"/tmp/pdfs_energy_some_snrs_{modulation["name"]}.png")
 
 
 def parse_args() -> Namespace:
@@ -91,7 +149,9 @@ if __name__ == "__main__":
 
     args = parse_args()
 
-    assert int(np.sqrt(args.num_plots))**2 == args.num_plots, f"{args.num_plots} needs to be a square number"
+    assert (
+        int(np.sqrt(args.num_plots)) ** 2 == args.num_plots
+    ), f"{args.num_plots} needs to be a square number"
 
     regex = re.compile(args.regex)
 
@@ -117,6 +177,8 @@ if __name__ == "__main__":
     with timeit("Plotting") as _:
         for modulation in regressed:
             plot_some_pdfs(modulation, n=args.num_plots, save=args.save)
+            # plot_specific_snrs(modulation, snrs=undb(np.array([6, -6, -18, -30])))
 
+    gc.collect()
     if not args.save:
         plt.show()
