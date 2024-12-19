@@ -1,7 +1,7 @@
 [package]
 name = "bazbandilo"
 description = "A chaotic communications simulator."
-version = "0.1.6"
+version = "0.1.7"
 license = "GPL-3.0-or-later"
 edition = "2021"
 homepage = "https://github.com/Fierthraix/bazbandilo"
