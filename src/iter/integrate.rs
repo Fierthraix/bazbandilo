@@ -132,3 +132,32 @@ where
         Some(sum)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::iter::Iter;
+
+    #[test]
+    fn integrate() {
+        let num = 1000;
+        let sum: Vec<usize> = (0..num).integrate().collect();
+
+        // Check with triangular numbers: https://oeis.org/A000217
+        let result: Vec<usize> = (0..num).map(|n| n * (n + 1) / 2).collect();
+        assert_eq!(sum, result);
+    }
+
+    #[test]
+    fn nintegrate() {
+        const N: usize = 4;
+        let first: Vec<[usize; N]> = (1..100 + 1).map(|x| [x; N]).collect();
+        let second: Vec<[usize; N]> = [1]
+            .into_iter()
+            .cycle()
+            .take(100)
+            .map(|x| [x; N])
+            .nintegrate()
+            .collect();
+        assert_eq!(first, second);
+    }
+}

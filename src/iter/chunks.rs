@@ -75,3 +75,22 @@ impl<T: Copy + Default, I: Iterator<Item = T>> Iterator for WholeChunks<T, I> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::iter::Iter;
+
+    #[test]
+    fn chunks() {
+        let num = 1000;
+        let num_chunks = 5;
+        let ones: Vec<usize> = std::iter::repeat_n(1, num)
+            .chunks(num_chunks)
+            .map(|chunk| chunk.into_iter().product::<usize>())
+            .collect();
+
+        let expected = vec![1; num / num_chunks];
+
+        assert_eq!(ones, expected);
+    }
+}

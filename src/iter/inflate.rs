@@ -30,3 +30,15 @@ impl<T: Copy, I: Iterator<Item = T>> Iterator for Inflate<T, I> {
         self.curr
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::iter::Iter;
+
+    #[test]
+    fn inflate() {
+        let ones: Vec<usize> = std::iter::once(1).inflate(10).collect();
+
+        assert_eq!(ones, vec![1; 10]);
+    }
+}

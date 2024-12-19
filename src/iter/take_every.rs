@@ -29,3 +29,15 @@ impl<T, I: Iterator<Item = T>> Iterator for Take<T, I> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::iter::Iter;
+
+    #[test]
+    fn test_take_every() {
+        let list: Vec<usize> = (0..10).take_every(2).collect();
+
+        assert_eq!(list, [0, 2, 4, 6, 8]);
+    }
+}
