@@ -97,11 +97,6 @@ def plot_youden_j_with_multiple_modulations(
     fig, ax = plt.subplots()
     ax.set_xlabel("SNR (db)")
     ax.set_ylabel("Youden J")
-    if title:
-        fig.suptitle(f"{kind} - {title}")
-    else:
-        fig.suptitle(kind)
-
     ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
     for modulation in modulation_test_results:
         snrs = modulation["snrs"]
@@ -116,6 +111,10 @@ def plot_youden_j_with_multiple_modulations(
     if save:
         fig.set_size_inches(16, 9)
         fig.savefig(f"/tmp/Youden-J_{kind}_multiple_modulations.png")
+    if title:
+        fig.suptitle(f"{kind} - {title}")
+    else:
+        fig.suptitle(kind)
 
 
 def plot_pd_vs_ber(
@@ -156,10 +155,10 @@ def plot_pd_vs_ber(
     pd_ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)", color="Blue")
     pd_ax.legend(loc="best")
     ax.set_xlabel("Signal to Noise Ratio dB (SNR dB)")
-    ax.set_title(modulation["name"])
     if save:
         fig.set_size_inches(16, 9)
         fig.savefig(f'/tmp/ber_{modulation["name"]}.png')
+    ax.set_title(modulation["name"])
 
 
 def parse_results(
@@ -212,7 +211,6 @@ def plot_all_bers(bers: List[Dict[str, object]], save=False):
     ax.set_yscale("log")
     ax.set_xlabel("SNR (dB)")
     ax.set_ylabel("BER")
-    ax.set_title("BER vs SNR (All Modulations)")
 
     ax.plot(
         db(ber["snrs"]),
@@ -224,6 +222,7 @@ def plot_all_bers(bers: List[Dict[str, object]], save=False):
     if save:
         fig.set_size_inches(16, 9)
         fig.savefig("/tmp/bers_multiple_modulations.png")
+    ax.set_title("BER vs SNR (All Modulations)")
 
 
 def plot_pd_vs_ber_metric(
@@ -236,7 +235,6 @@ def plot_pd_vs_ber_metric(
     ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
     ax.set_xlabel(r"Probability of Detection ($\mathbb{P}_D$)")
     ax.set_ylabel("Bit Error Rate (BER)")
-    ax.set_title(f"{kind}" + r"Detector - BER vs $\mathbb{{P}}_D$")
     for modulation in modulation_test_results:
         try:
             mod_ber = next(b for b in bers if b["name"] == modulation["name"])
@@ -256,12 +254,12 @@ def plot_pd_vs_ber_metric(
         ax.plot(x[:r], y[:r], label=modulation["name"])
     ax.set_xlabel(r"Probability of Detection ($\mathbb{P}_D$)")
     ax.set_ylabel("Bit Error Rate (BER)")
-    ax.set_title(f"{kind} Detector" + r" - BER vs $\mathbb{P}_D$")
     ax.legend(loc="best")
 
     if save:
         fig.set_size_inches(16, 9)
         fig.savefig(f"/tmp/covert_metric_{kind}.png")
+    ax.set_title(f"{kind} Detector" + r" - BER vs $\mathbb{P}_D$")
 
 
 def plot_pd_vs_pfa(
@@ -273,7 +271,6 @@ def plot_pd_vs_pfa(
     ax.set_prop_cycle(get_cycles(len(results_object)))
     ax.set_xlabel(r"Probability of False Alarm ($\mathbb{P}_{FA}$)")
     ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)")
-    ax.set_title(f"{kind} Detector" + r"- $\mathbb{P}_D$ vs $\mathbb{{P}}_{FA}$")
     for modulation in results_object:
         try:
             p = modulation[kind]["df"]
@@ -286,15 +283,15 @@ def plot_pd_vs_pfa(
         snr_db = db(modulation["snrs"][mid])
         ax.plot(x, y, label=f"{modulation["name"]}")
     ax.legend(loc="best")
+
+    if save:
+        fig.set_size_inches(16, 9)
+        fig.savefig(f"/tmp/pd_vs_pfa_{kind}_{snr_db}dB.png")
     ax.set_title(
         f"{kind}"
         + r"Detector - $\mathbb{P}_D$ vs $\mathbb{{P}}_{FA}$ - "
         + f"SNR={snr_db:.2f}"
     )
-
-    if save:
-        fig.set_size_inches(16, 9)
-        fig.savefig(f"/tmp/pd_vs_pfa_{kind}_{snr_db}dB.png")
 
 
 def plot_λ_vs_snr(
@@ -323,12 +320,13 @@ def plot_λ_vs_snr(
         ax.plot(db(modulation["snrs"]), λ0s, label=f"{modulation['name']}")
     ax.set_xlabel("SNR (dB)")
     ax.set_ylabel("Threshold λ")
-    ax.set_title(f"Threshold vs SNR ({kind})")
     ax.legend(loc="best")
 
     if save:
         fig.set_size_inches(16, 9)
         fig.savefig(f"/tmp/lambda_{kind}.png")
+    ax.set_title(f"Threshold vs SNR ({kind})")
+
 
 def filter_results(
     results_object: List[Dict[str, object]], pattern: re.Pattern
@@ -393,6 +391,8 @@ if __name__ == "__main__":
             regressed: List[Dict[str, object]] = list(p.map(parse, results))
         del results
         gc.collect()
+
+        DETECTORS = [k for k in regressed[0].keys() if k not in ("name", "snrs")]
 
         with timeit("Plotting") as _:
 
