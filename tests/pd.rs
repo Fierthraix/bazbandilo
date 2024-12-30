@@ -1,41 +1,82 @@
 use std::ffi::CString;
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::sync::Mutex;
 
-use kdam::{par_tqdm, BarExt};
+use lazy_static::lazy_static;
 use ndarray::s;
-use num::Zero;
 use num_complex::Complex;
 use numpy::ndarray::{Array2, Axis};
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
-use rand::Rng;
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[macro_use]
-mod util;
+use bazbandilo::{fam::fam, linspace, undb};
 
-use bazbandilo::{
-    awgn,
-    cdma::{tx_cdma_bpsk_signal, tx_cdma_qpsk_signal},
-    csk::tx_csk_signal,
-    css::tx_css_signal,
-    dcsk::{tx_dcsk_signal, tx_qcsk_signal},
-    fam::fam,
-    fh_ofdm_dcsk::tx_fh_ofdm_dcsk_signal,
-    fsk::tx_bfsk_signal,
-    hadamard::HadamardMatrix,
-    iter::Iter,
-    linspace,
-    ofdm::tx_ofdm_signal,
-    psk::{tx_bpsk_signal, tx_qpsk_signal},
-    qam::tx_qam_signal,
-    undb, Bit,
-};
+pub const NUM_SAMPLES: usize = 65536;
 
-fn dcs_detect(sxf: &Array2<Complex<f64>>) -> f64 {
+// pub const NUM_ATTEMPTS: usize = 100;
+pub const NUM_ATTEMPTS: usize = 1000;
+
+lazy_static! {
+    // pub static ref snrs_db: Vec<f64> = linspace(-45f64, 12f64, 15).collect();
+    pub static ref snrs_db: Vec<f64> = linspace(-45f64, 12f64, 150).collect();
+    pub static ref snrs_lin: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Detector {
+    Energy,
+    MaxCut,
+    Dcs,
+    NormalTest,
+}
+
+impl Detector {
+    pub fn get(&self) -> &str {
+        match self {
+            Detector::Energy => "Energy Detector",
+            Detector::MaxCut => "Max Cut Detector",
+            Detector::Dcs => "DCS Detector",
+            Detector::NormalTest => "Normal Test Detector",
+        }
+    }
+    pub fn iter() -> impl Iterator<Item = Detector> {
+        [
+            Detector::Energy,
+            Detector::MaxCut,
+            Detector::Dcs,
+            Detector::NormalTest,
+        ]
+        .into_iter()
+    }
+}
+
+pub fn run_detectors<I: Iterator<Item = Complex<f64>>>(signal: I) -> Vec<DetectorOutput> {
+    let np = 64;
+    let n = 4096;
+    let chan_signal: Vec<Complex<f64>> = signal.take(n + np).collect();
+
+    let sxf_fam = fam(&chan_signal, n + np, np);
+
+    vec![
+        DetectorOutput {
+            kind: Detector::Energy,
+            λ: energy_detect(&chan_signal),
+        },
+        DetectorOutput {
+            kind: Detector::MaxCut,
+            λ: max_cut_detect(&sxf_fam),
+        },
+        DetectorOutput {
+            kind: Detector::Dcs,
+            λ: dcs_detect_fam(&sxf_fam),
+        },
+        DetectorOutput {
+            kind: Detector::NormalTest,
+            λ: normal_detect(&chan_signal),
+        },
+    ]
+}
+
+pub fn dcs_detect(sxf: &Array2<Complex<f64>>) -> f64 {
     let middle: usize = sxf.shape()[1] / 2;
     let left = sxf.slice(s![.., ..middle]);
     let right = sxf.slice(s![.., middle + 1..]);
@@ -120,90 +161,43 @@ def p_vals(signal_im, signal_re):
     })
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-enum Detector {
-    Energy,
-    MaxCut,
-    Dcs,
-}
-
-impl Detector {
-    fn get(&self) -> &str {
-        match self {
-            Detector::Energy => "Energy Detector",
-            Detector::MaxCut => "Max Cut Detector",
-            Detector::Dcs => "DCS Detector",
-        }
-    }
-    fn iter() -> impl Iterator<Item = Detector> {
-        [Detector::Energy, Detector::MaxCut, Detector::Dcs].into_iter()
-    }
-}
-
-fn run_detectors<I: Iterator<Item = Complex<f64>>>(signal: I) -> Vec<DetectorOutput> {
-    let np = 64;
-    let n = 4096;
-    let chan_signal: Vec<Complex<f64>> = signal.take(n + np).collect();
-
-    let sxf_fam = fam(&chan_signal, n + np, np);
-
-    vec![
-        DetectorOutput {
-            kind: Detector::Energy,
-            λ: energy_detect(&chan_signal),
-        },
-        DetectorOutput {
-            kind: Detector::MaxCut,
-            λ: max_cut_detect(&sxf_fam),
-        },
-        DetectorOutput {
-            kind: Detector::Dcs,
-            λ: dcs_detect_fam(&sxf_fam),
-        },
-        // DetectorOutput {
-        //     kind: Detector::NormalTest,
-        //     λ: normal_detect(&chan_signal),
-        // },
-    ]
-}
-
 /// The output of a detector on a lone signal.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct DetectorOutput {
-    kind: Detector,
-    λ: f64,
+pub struct DetectorOutput {
+    pub kind: Detector,
+    pub λ: f64,
 }
 
 /// The output of a detector on many snrs.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct DetectorResults {
-    kind: Detector,
-    snrs: Vec<f64>,
-    h0_λs: Vec<Vec<f64>>,
-    h1_λs: Vec<Vec<f64>>,
+pub struct DetectorResults {
+    pub kind: Detector,
+    pub snrs: Vec<f64>,
+    pub h0_λs: Vec<Vec<f64>>,
+    pub h1_λs: Vec<Vec<f64>>,
 }
 
 /// The result of running a modulation at many SNRS many times.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct ModulationDetectorResults {
-    name: String,
-    results: Vec<DetectorResults>,
-    snrs: Vec<f64>,
+pub struct ModulationDetectorResults {
+    pub name: String,
+    pub results: Vec<DetectorResults>,
+    pub snrs: Vec<f64>,
 }
 
 /// Detector Test harness.
-struct DetectorTest<'a> {
-    snrs: Vec<f64>,
-    run_fn: &'a dyn Fn(&[f64]) -> ModulationDetectorResults,
+pub struct DetectorTest<'a> {
+    pub snrs: Vec<f64>,
+    pub run_fn: &'a dyn Fn(&[f64]) -> ModulationDetectorResults,
 }
 
 impl DetectorTest<'_> {
-    fn run(self) -> ModulationDetectorResults {
+    pub fn run(self) -> ModulationDetectorResults {
         (self.run_fn)(&self.snrs)
     }
 }
 
-fn remap_results(λs: &[Vec<Vec<DetectorOutput>>], kind: &str) -> Vec<Vec<f64>> {
+pub fn remap_results(λs: &[Vec<Vec<DetectorOutput>>], kind: &str) -> Vec<Vec<f64>> {
     let λs: Vec<Vec<f64>> = λs
         .iter()
         .map(|input| {
@@ -227,11 +221,6 @@ fn remap_results(λs: &[Vec<Vec<DetectorOutput>>], kind: &str) -> Vec<Vec<f64>> 
         .collect();
     λs
 }
-
-const NUM_SAMPLES: usize = 65536;
-
-const NUM_ATTEMPTS: usize = 1000;
-// const NUM_ATTEMPTS: usize = 20;
 
 macro_rules! DetectorTest {
     ($name:expr, $tx_fn:expr, $snrs:expr) => {{
@@ -306,160 +295,4 @@ macro_rules! DetectorTest {
             },
         }
     }};
-}
-
-#[test]
-fn main() {
-    // let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 15).collect();
-    // let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 25).collect();
-    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 150).collect();
-
-    let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
-
-    let h_16 = HadamardMatrix::new(16);
-    let h_32 = HadamardMatrix::new(32);
-    let h_64 = HadamardMatrix::new(64);
-    let key_16 = h_16.key(2);
-    let key_32 = h_32.key(2);
-    let key_64 = h_64.key(2);
-
-    let harness = [
-        // PSK
-        DetectorTest!("BPSK", |m| tx_bpsk_signal(m).inflate(64), snrs),
-        DetectorTest!("QPSK", |m| tx_qpsk_signal(m).inflate(64), snrs),
-        // CDMA
-        DetectorTest!(
-            "CDMA-BPSK-16",
-            |m| tx_cdma_bpsk_signal(m, key_16).inflate(4),
-            snrs
-        ),
-        DetectorTest!(
-            "CDMA-QPSK-16",
-            |m| tx_cdma_qpsk_signal(m, key_16).inflate(4),
-            snrs
-        ),
-        // DetectorTest!("CDMA-BPSK-32", |m| tx_cdma_bpsk_signal(m, key_32), snrs),
-        DetectorTest!(
-            "CDMA-QPSK-32",
-            |m| tx_cdma_qpsk_signal(m, key_32).inflate(2),
-            snrs
-        ),
-        // DetectorTest!("CDMA-BPSK-64", |m| tx_cdma_bpsk_signal(m, key_64), snrs),
-        DetectorTest!("CDMA-QPSK-64", |m| tx_cdma_qpsk_signal(m, key_64), snrs),
-        // QAM
-        // DetectorTest!("4QAM", |m| tx_qam_signal(m, 4), snrs),
-        DetectorTest!("16QAM", |m| tx_qam_signal(m, 16).inflate(4), snrs),
-        DetectorTest!("64QAM", |m| tx_qam_signal(m, 64), snrs),
-        // BFSK
-        DetectorTest!("BFSK-16", |m| tx_bfsk_signal(m, 16).inflate(4), snrs),
-        DetectorTest!("BFSK-32", |m| tx_bfsk_signal(m, 32).inflate(2), snrs),
-        DetectorTest!("BFSK-64", |m| tx_bfsk_signal(m, 64), snrs),
-        // OFDM
-        DetectorTest!(
-            "OFDM-BPSK-16",
-            |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 0).inflate(4),
-            snrs
-        ),
-        DetectorTest!(
-            "OFDM-QPSK-16",
-            |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 0).inflate(4),
-            snrs
-        ),
-        DetectorTest!(
-            "OFDM-BPSK-64",
-            |m| tx_ofdm_signal(tx_bpsk_signal(m), 64, 0),
-            snrs
-        ),
-        DetectorTest!(
-            "OFDM-QPSK-64",
-            |m| tx_ofdm_signal(tx_qpsk_signal(m), 64, 0),
-            snrs
-        ),
-        // Chirp Spread Spectrum
-        DetectorTest!("CSS-16", |m| tx_css_signal(m, 16).inflate(4), snrs),
-        DetectorTest!("CSS-64", |m| tx_css_signal(m, 64), snrs),
-        // DetectorTest!("CSS-128", |m| tx_css_signal(m, 128), snrs),
-        // CSK
-        DetectorTest!("CSK", |m| tx_csk_signal(m).inflate(64), snrs),
-        DetectorTest!("DCSK", |m| tx_dcsk_signal(m).inflate(32), snrs),
-        DetectorTest!("QCSK", |m| tx_qcsk_signal(m).inflate(32), snrs),
-        // FH-OFDM-DCSK
-        DetectorTest!("FH-OFDM-DCSK", tx_fh_ofdm_dcsk_signal, snrs),
-    ];
-
-    /*
-    let harness = [
-        // PSK
-        DetectorTest!("BPSK", tx_bpsk_signal, snrs),
-        DetectorTest!("QPSK", tx_qpsk_signal, snrs),
-        // CDMA
-        DetectorTest!("CDMA-BPSK-16", |m| tx_cdma_bpsk_signal(m, key_16), snrs),
-        DetectorTest!("CDMA-QPSK-16", |m| tx_cdma_qpsk_signal(m, key_16), snrs),
-        // DetectorTest!("CDMA-BPSK-32", |m| tx_cdma_bpsk_signal(m, key_32), snrs),
-        DetectorTest!("CDMA-QPSK-32", |m| tx_cdma_qpsk_signal(m, key_32), snrs),
-        // DetectorTest!("CDMA-BPSK-64", |m| tx_cdma_bpsk_signal(m, key_64), snrs),
-        DetectorTest!("CDMA-QPSK-64", |m| tx_cdma_qpsk_signal(m, key_64), snrs),
-        // QAM
-        // DetectorTest!("4QAM", |m| tx_qam_signal(m, 4), snrs),
-        DetectorTest!("16QAM", |m| tx_qam_signal(m, 16), snrs),
-        DetectorTest!("64QAM", |m| tx_qam_signal(m, 64), snrs),
-        // BFSK
-        DetectorTest!("BFSK-16", |m| tx_bfsk_signal(m, 16), snrs),
-        DetectorTest!("BFSK-32", |m| tx_bfsk_signal(m, 32), snrs),
-        DetectorTest!("BFSK-64", |m| tx_bfsk_signal(m, 64), snrs),
-        // OFDM
-        DetectorTest!(
-            "OFDM-BPSK-16",
-            |m| tx_ofdm_signal(tx_bpsk_signal(m), 16, 0),
-            snrs
-        ),
-        DetectorTest!(
-            "OFDM-QPSK-16",
-            |m| tx_ofdm_signal(tx_qpsk_signal(m), 16, 0),
-            snrs
-        ),
-        DetectorTest!(
-            "OFDM-BPSK-64",
-            |m| tx_ofdm_signal(tx_bpsk_signal(m), 64, 0),
-            snrs
-        ),
-        DetectorTest!(
-            "OFDM-QPSK-64",
-            |m| tx_ofdm_signal(tx_qpsk_signal(m), 64, 0),
-            snrs
-        ),
-        // Chirp Spread Spectrum
-        DetectorTest!("CSS-16", |m| tx_css_signal(m, 16), snrs),
-        DetectorTest!("CSS-64", |m| tx_css_signal(m, 64), snrs),
-        // DetectorTest!("CSS-128", |m| tx_css_signal(m, 128), snrs),
-        // CSK
-        DetectorTest!("CSK", tx_csk_signal, snrs),
-        DetectorTest!("DCSK", tx_dcsk_signal, snrs),
-        DetectorTest!("QCSK", tx_qcsk_signal, snrs),
-        // FH-OFDM-DCSK
-        DetectorTest!("FH-OFDM-DCSK", tx_fh_ofdm_dcsk_signal, snrs),
-    ];
-    */
-
-    let results: Vec<ModulationDetectorResults> = {
-        let mut results = Vec::with_capacity(harness.len());
-        for modulation in harness {
-            let result = modulation.run();
-            results.push(result);
-
-            // Save results to file.
-            {
-                let name = "/tmp/results.json";
-                let file = File::create(name).unwrap();
-                let mut writer = BufWriter::new(file);
-                serde_json::to_writer(&mut writer, &results).unwrap();
-
-                writer.flush().unwrap();
-                println!("Saved {}", name);
-            }
-        }
-        results
-    };
-
-    drop(results);
 }
