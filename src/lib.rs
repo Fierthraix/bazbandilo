@@ -8,6 +8,7 @@ use pyo3::prelude::*;
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
 
+pub mod barker;
 mod bch;
 pub mod cdma;
 pub mod chaos;
