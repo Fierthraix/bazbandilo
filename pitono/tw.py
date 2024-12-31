@@ -56,7 +56,6 @@ def plot_all_tws(
     fig, ax = plt.subplots()
     ax.set_xlabel("SNR (db)")
     ax.set_ylabel("Youden J")
-    fig.suptitle("SNR vs PD - Different $TW$ products")
 
     ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
     midline_snrs = []
@@ -80,6 +79,7 @@ def plot_all_tws(
     if save:
         fig.set_size_inches(16, 9)
         fig.savefig("/tmp/Youden-J_different_TW_product.png")
+    fig.suptitle("SNR vs PD - Different $TW$ products")
 
 
 
@@ -91,7 +91,6 @@ def plot_all_tws_old(
     ax.set_prop_cycle(get_cycles(len(results_object)))
     ax.set_xlabel(r"Signal-to-Noise Ration (SNR) (dB)")
     ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)")
-    ax.set_title(r"Energy Detector $\text{SNR}$ vs $\mathbb{{P}}_D$")
     for modulation in results_object:
         p = modulation["results"]["youden_j"]
         snr_db = db(modulation["snrs"])
@@ -101,6 +100,7 @@ def plot_all_tws_old(
     if save:
         fig.set_size_inches(16, 9)
         fig.savefig("/tmp/tw_snr_vs_pd.png")
+    ax.set_title(r"Energy Detector $\text{SNR}$ vs $\mathbb{{P}}_D$")
 
 
 def parse_args() -> Namespace:
@@ -143,6 +143,7 @@ if __name__ == "__main__":
 
     with timeit("Plotting") as _:
 
-        plot_all_tws(regressed)
+        plot_all_tws(regressed, save=args.save)
 
-    plt.show()
+    if not args.save:
+        plt.show()
