@@ -1,12 +1,12 @@
 [tool.poetry]
-name = "kom-py"
+name = "bazbandilo"
 version = "0.1.0"
 description = ""
 authors = ["Lucas Rooyakkers <lucas.rooyakkers@pm.me>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.11"
 numpy = "^1.26.4"
 matplotlib = "^3.9.0"
 scipy = "^1.13.1"
