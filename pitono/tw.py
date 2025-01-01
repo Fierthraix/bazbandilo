@@ -9,6 +9,8 @@ import gc
 import numpy as np
 import pandas as pd
 from typing import Dict, List
+import psutil
+from tqdm import tqdm
 
 
 def parse_results(
@@ -82,7 +84,6 @@ def plot_all_tws(
     fig.suptitle("SNR vs PD - Different $TW$ products")
 
 
-
 def plot_all_tws_old(
     results_object: List[Dict[str, object]],
     save=False,
@@ -123,6 +124,8 @@ if __name__ == "__main__":
 
     args = parse_args()
 
+    results_file = Path(args.tw_file)
+    results_file_size = results_file.stat().st_size
     with timeit("Loading Data") as _:
         # Load from JSON.
         with Path(args.tw_file).open("r") as f:
@@ -132,11 +135,18 @@ if __name__ == "__main__":
 
     # Parse and Log Regress results.
     parse = partial(parse_results, num_regressions=args.log_regressions)
-    # regressed: List[Dict[str, object]] = list(map(parse, results))
-    with concurrent.futures.ProcessPoolExecutor() as p, timeit(
-        "Logistic Regresstion"
-    ) as _:
-        regressed: List[Dict[str, object]] = list(p.map(parse, results))
+
+    with timeit("Logistic Regression") as _:
+        if results_file_size * 8 > psutil.virtual_memory().available:
+            regressed: List[Dict[str, object]] = []
+            progress = tqdm(total=len(results))
+            for _ in range(len(results)):
+                regressed.append(parse(results.pop(0)))
+                progress.update(1)
+                gc.collect()
+        else:
+            with concurrent.futures.ProcessPoolExecutor() as p:
+                regressed: List[Dict[str, object]] = list(p.map(parse, results))
 
     del results
     gc.collect()
