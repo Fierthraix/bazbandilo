@@ -49,11 +49,6 @@ rmp-serde = "1.3"
 
 [profile.release]
 opt-level = 3
-lto = "fat"
-panic = "abort"
-debug = false
-split-debuginfo = "packed"
-codegen-units = 1
 
 [profile.test]
 inherits = "release"
