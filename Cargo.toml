@@ -54,8 +54,6 @@ panic = "abort"
 debug = false
 split-debuginfo = "packed"
 codegen-units = 1
-test = false
-inline = true
 
 [profile.test]
 inherits = "release"
