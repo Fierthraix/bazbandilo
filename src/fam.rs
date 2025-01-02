@@ -29,15 +29,13 @@ pub fn fam(s: &[Complex<f64>], n: usize, np: usize) -> Array2<Complex<f64>> {
                 .map(|a_i| a_i * a_i.conj())
                 .convolve(window)
                 .take_every(np)
-                // .take(alphas.len()),
-                // .take(num_freqs),
                 .skip(1),
         );
         sx.slice_mut(s![0, ..]).assign(&scf_slice);
     }
 
-    for i in 1..alphas.len() {
-        let shift = (alphas[i] * n as f64 / 2f64) as isize;
+    for (i, alpha) in alphas.into_iter().enumerate().skip(1) {
+        let shift = (alpha * n as f64 / 2f64) as isize;
         let shift_right = {
             let mut b = Array1::uninit(a.dim());
             // println!("alen: {} | blen: {} | shift: {}", a.len(), b.len(), shift);
@@ -65,13 +63,10 @@ pub fn fam(s: &[Complex<f64>], n: usize, np: usize) -> Array2<Complex<f64>> {
                 .into_iter()
                 .convolve(window)
                 .take_every(np)
-                // .take(num_freqs),
                 .skip(1),
         );
         sx.slice_mut(s![i, ..]).assign(&scf_slice);
     }
-
-    // sx.mapv(Complex::abs)
     sx
 }
 
