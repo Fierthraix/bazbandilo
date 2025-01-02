@@ -95,6 +95,7 @@ def plot_youden_j_with_multiple_modulations(
     title: str = "",
 ):
     fig, ax = plt.subplots()
+    ax.grid(True)
     ax.set_xlabel("SNR (db)")
     ax.set_ylabel("Youden J")
     ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
@@ -128,6 +129,7 @@ def plot_pd_vs_ber(
     fig, ax = plt.subplots()
     ber_ax = ax
     pd_ax = ax.twinx()
+    pd_ax.grid(True)
     ber_ax.plot(db(mod_ber["snrs"]), mod_ber["bers"], color="Red")
     # ber_ax.plot(1.31225, good_ber, 'ro')
     # ber_ax.axhline(good_ber, color='Red', ls='--', label=f"Acceptable BER ({good_ber})")
@@ -148,7 +150,7 @@ def plot_pd_vs_ber(
             )
         except KeyError:
             continue
-    pd_ax.set_ylim([0, 1.1])
+    pd_ax.set_ylim([0, 1.025])
     # pd_ax.plot(-12.0556, good_pd, "bo")
     # pd_ax.axhline(good_pd, color='Blue', ls='--', label=f'Acceptable ℙd ({good_pd})')
     pd_ax.tick_params(axis="y", colors="Blue")
@@ -204,6 +206,7 @@ def parse_results(
 
 def plot_all_bers(bers: List[Dict[str, object]], save=False):
     fig, ax = plt.subplots(1)
+    ax.grid(True)
     ax.set_prop_cycle(get_cycles(len(bers)))
     for ber in bers:
         ax.plot(db(ber["snrs"]), ber["bers"], label=ber["name"])
@@ -212,13 +215,13 @@ def plot_all_bers(bers: List[Dict[str, object]], save=False):
     ax.set_xlabel("SNR (dB)")
     ax.set_ylabel("BER")
 
-    ax.plot(
-        db(ber["snrs"]),
-        ber_bpsk(ber["snrs"]),
-        color="Blue",
-        ls="--",
-        label="BPSK (Theoretical)",
-    )
+    # ax.plot(
+    #     db(ber["snrs"]),
+    #     ber_bpsk(ber["snrs"]),
+    #     color="Blue",
+    #     ls="--",
+    #     label="BPSK (Theoretical)",
+    # )
     if save:
         fig.set_size_inches(16, 9)
         fig.savefig("/tmp/bers_multiple_modulations.png")
@@ -232,6 +235,7 @@ def plot_pd_vs_ber_metric(
     save=False,
 ):
     fig, ax = plt.subplots()
+    ax.grid(True)
     ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
     ax.set_xlabel(r"Probability of Detection ($\mathbb{P}_D$)")
     ax.set_ylabel("Bit Error Rate (BER)")
@@ -268,6 +272,7 @@ def plot_pd_vs_pfa(
     save=False,
 ):
     fig, ax = plt.subplots()
+    ax.grid(True)
     ax.set_prop_cycle(get_cycles(len(results_object)))
     ax.set_xlabel(r"Probability of False Alarm ($\mathbb{P}_{FA}$)")
     ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)")
@@ -298,6 +303,7 @@ def plot_λ_vs_snr(
     results_object: List[Dict[str, object]], kind: str, save: bool = False
 ):
     fig, ax = plt.subplots()
+    ax.grid(True)
     ax.set_prop_cycle(get_cycles(len(results_object)))
     for modulation in results_object:
         try:
