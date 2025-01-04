@@ -2,7 +2,7 @@ default: make
 
 alias b := ber
 alias c := clean
-alias f := flamegraph
+alias f := foo
 alias i := interactive
 alias j := jupyter
 alias m := make
@@ -12,7 +12,8 @@ alias s := shell
 alias t := test
 
 test_dir := justfile_directory() + "/tests/"
-ffi_dir := justfile_directory() + "/komrs"
+ffi_dir := justfile_directory() + "/bazbandilo"
+python_dir := justfile_directory() + "/pitono/"
 
 ber:
 	cargo test --test ber -- --nocapture
@@ -25,6 +26,10 @@ make:
 
 flamegraph arg:
 	poetry run python3 -m plop.collector -f flamegraph {{ arg }}
+
+[no-cd]
+foo *args:
+	poetry run python3 -i {{ python_dir + "/foo.py" }} {{ args }}
 
 install:
 	poetry install
@@ -52,7 +57,7 @@ interactive *kargs:
 	poetry run python3 -i {{ kargs }}
 
 test arg:
-	cargo test --test {{ arg}} -- --nocapture
+	cargo test --test {{ arg }} -- --nocapture
 
 run:
 	# @just ber
