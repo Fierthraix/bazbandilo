@@ -2,10 +2,6 @@
 import numpy as np
 from typing import List
 
-from util import timeit
-from willie import awgn
-
-
 def plot_ssca_triangle(s, log=True):
     import matplotlib.pyplot as plt
 
@@ -14,6 +10,8 @@ def plot_ssca_triangle(s, log=True):
     X, Y = np.meshgrid(x, y)
 
     fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+    ax.set_xlabel("Frequency ($f$)")
+    ax.set_ylabel(r"Cycle Frequency ($\alpha$)")
     ss = s[:, : s.shape[1] // 2 + 1]
     if log:
         ax.plot_surface(X, Y, 10 * np.log(np.abs(ss)), cmap="plasma")
@@ -29,6 +27,8 @@ def plot_ssca_diamond(s, log=True):
     X, Y = np.meshgrid(x, y)
 
     fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+    ax.set_xlabel("Frequency ($f$)")
+    ax.set_ylabel(r"Cycle Frequency ($\alpha$)")
     ss = s[:, : s.shape[1]]
     if log:
         ax.plot_surface(X, Y, 10 * np.log(np.abs(ss)), cmap="plasma")
@@ -36,11 +36,13 @@ def plot_ssca_diamond(s, log=True):
         ax.plot_surface(X, Y, np.abs(ss), cmap="plasma")
 
 
-def plot_lambda(l_a: np.ndarray):
+def plot_lambda(l_a: np.ndarray, title: str = ""):
     import matplotlib.pyplot as plt
 
     x = np.linspace(0, 1, len(l_a))
     _, ax = plt.subplots()
+    if title:
+        ax.set_title(title)
     ax.plot(x, l_a)
 
 
@@ -109,62 +111,3 @@ def dcs(sx: np.ndarray) -> np.ndarray:
     λ = np.sum(np.abs(sx) ** 2, axis=0) / np.abs(sx[0, :]) ** 2
     return 10 * np.log10(λ)
     # return λ
-
-
-if __name__ == "__main__":
-    from psk import tx_bpsk, tx_qpsk
-    from cdma import tx_bpsk_cdma
-    import random
-
-    SAMPLE_RATE = 48_000
-    SYMBOL_RATE = 1000
-    CARRIER_FREQ = 2500
-    NUM_BITS = 9002
-
-    def rand_data(num_bits: int) -> List[bool]:
-        return [random.choice((True, False)) for _ in range(num_bits)]
-
-    N0 = 0.5
-    data: List[bool] = rand_data(NUM_BITS)
-    bpsk: List[float] = tx_bpsk(data, SAMPLE_RATE, SYMBOL_RATE, CARRIER_FREQ)
-    # bpsk_awgn: List[float] = awgn(bpsk, N0)
-    bpsk_awgn: List[float] = bpsk
-
-    # cdma_bpsk_awgn = awgn(
-    #     tx_bpsk_cdma(data, SAMPLE_RATE, SYMBOL_RATE, CARRIER_FREQ), N0
-    # )
-    cdma_bpsk_awgn = tx_bpsk_cdma(data, SAMPLE_RATE, SYMBOL_RATE, CARRIER_FREQ)
-
-    qpsk: List[float] = tx_qpsk(data, SAMPLE_RATE, SYMBOL_RATE, CARRIER_FREQ)
-    qpsk_awgn: List[float] = awgn(qpsk, N0)
-    N = 4096
-    # N = 32768 # 4096
-    Np = 64
-
-    # for sig in (awgn(np.zeros(len(bpsk)), N0), bpsk, bpsk_awgn, qpsk, qpsk_awgn):
-    # for sig in (awgn(np.zeros(len(bpsk)), N0), bpsk, bpsk_awgn):
-    signals = (awgn(np.zeros(len(bpsk)), N0), bpsk_awgn, cdma_bpsk_awgn)
-
-    def do_signal(sig: List[float]):
-        # Np = 256
-        Np = 64
-        # N = floor_power_of_2(len(sig) - Np)
-        N = 4096
-        with timeit("SSCA") as _:
-            sx = ssca(sig, N, Np)
-            mc = max_cut(sx)
-            dc = dcs(sx)
-        plot_ssca_triangle(sx)
-        # plot_ssca_diamond(sx)
-        plot_lambda(mc)
-        plot_lambda(dc)
-        import matplotlib.pyplot as plt
-
-        # plt.show()
-
-    results = [do_signal(signal) for signal in signals]
-    # with Pool(8) as p:
-    #     results = p.map(do_signal, signals)
-
-    import matplotlib.pyplot as plt
-    plt.show()
