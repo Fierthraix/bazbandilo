@@ -29,7 +29,7 @@ flamegraph arg:
 
 [no-cd]
 foo *args:
-	poetry run python3 -i {{ python_dir + "/foo.py" }} {{ args }}
+	poetry run python3 -i {{ python_dir + "foo.py" }} {{ args }}
 
 install:
 	poetry install
