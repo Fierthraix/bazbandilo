@@ -7,10 +7,11 @@ import concurrent.futures
 from functools import partial
 import gc
 import numpy as np
+import os
 import pandas as pd
-from typing import Dict, List
 import psutil
 from tqdm import tqdm
+from typing import Dict, List
 
 
 def parse_results(
@@ -136,17 +137,21 @@ if __name__ == "__main__":
     # Parse and Log Regress results.
     parse = partial(parse_results, num_regressions=args.log_regressions)
 
+    num_cpus: int = os.cpu_count()
+    ram: int = psutil.virtual_memory().available
+    num_workers = min(ram // results_file_size, num_cpus)
+
     with timeit("Logistic Regression") as _:
-        if results_file_size * 8 > psutil.virtual_memory().available:
+        if num_workers > 1:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as p:
+                regressed: List[Dict[str, object]] = list(p.map(parse, results))
+        else:
             regressed: List[Dict[str, object]] = []
             progress = tqdm(total=len(results))
             for _ in range(len(results)):
                 regressed.append(parse(results.pop(0)))
                 progress.update(1)
                 gc.collect()
-        else:
-            with concurrent.futures.ProcessPoolExecutor() as p:
-                regressed: List[Dict[str, object]] = list(p.map(parse, results))
 
     del results
     gc.collect()
