@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 from util import db, timeit
-from ber import ber_bpsk
 
 from argparse import ArgumentParser, Namespace
 import concurrent.futures
@@ -8,12 +7,24 @@ from cycler import cycler
 import gc
 from functools import partial
 import numpy as np
+import os
+import pandas as pd
+from pathlib import Path
+import psutil
+import re
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_curve
-import pandas as pd
-import re
-from typing import Dict, List
+from typing import Dict, List, Tuple
+
+
+# FIG_SIZE = (16, 9)
+FIG_SIZE: Tuple[float, float] = (12, 7)
+# FIG_SIZE = (8, 4.5)
+
+NCOLS: int = 2
+
+BER_YLIM: List[float] = [1e-4, 0.55]
 
 
 def log_regress(
@@ -92,13 +103,19 @@ def plot_youden_j_with_multiple_modulations(
     modulation_test_results: List[Dict[str, object]],
     kind: str,
     save=False,
+    save_dir=Path("/tmp/"),
     title: str = "",
 ):
     fig, ax = plt.subplots()
-    ax.grid(True)
+    ax.grid(True, which="both")
     ax.set_xlabel("SNR (db)")
-    ax.set_ylabel("Youden J")
+    ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)")
     ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
+
+    snrs_db = db(modulation_test_results[0]["snrs"])
+    ax.set_xlim(snrs_db.min(), snrs_db.max())
+    ax.set_ylim([0, 1.025])
+
     for modulation in modulation_test_results:
         snrs = modulation["snrs"]
         try:
@@ -108,10 +125,12 @@ def plot_youden_j_with_multiple_modulations(
             return
         ax.plot(db(snrs), youden_js, label=modulation["name"])
 
-    ax.legend(loc="best")
+    ax.legend(loc="best", ncols=NCOLS)
     if save:
-        fig.set_size_inches(16, 9)
-        fig.savefig(f"/tmp/Youden-J_{kind}_multiple_modulations.png")
+        fig.set_size_inches(*FIG_SIZE)
+        fig.savefig(
+            save_dir / f"Youden-J_{kind}_multiple_modulations.png", bbox_inches="tight"
+        )
     if title:
         fig.suptitle(f"{kind} - {title}")
     else:
@@ -119,7 +138,10 @@ def plot_youden_j_with_multiple_modulations(
 
 
 def plot_pd_vs_ber(
-    modulation: Dict[str, object], bers: List[Dict[str, object]], save=False
+    modulation: Dict[str, object],
+    bers: List[Dict[str, object]],
+    save=False,
+    save_dir=Path("/tmp/"),
 ):
     try:
         mod_ber = next(b for b in bers if b["name"] == modulation["name"])
@@ -127,16 +149,16 @@ def plot_pd_vs_ber(
         print(f"BER for {modulation["name"]} not found.")
         return
     fig, ax = plt.subplots()
+    ax.set_xlim(db([modulation["snrs"]]).min(), db([modulation["snrs"]]).max())
     ber_ax = ax
     pd_ax = ax.twinx()
-    pd_ax.grid(True)
+    # pd_ax.grid(True, which='both')
+    ber_ax.grid(True, which="both")
     ber_ax.plot(db(mod_ber["snrs"]), mod_ber["bers"], color="Red")
-    # ber_ax.plot(1.31225, good_ber, 'ro')
-    # ber_ax.axhline(good_ber, color='Red', ls='--', label=f"Acceptable BER ({good_ber})")
-    ber_ax.set_ylim([0, 0.51])
+    ber_ax.set_yscale("log")
+    ber_ax.set_ylim(BER_YLIM)
     ber_ax.tick_params(axis="y", colors="Red")
     ber_ax.set_ylabel("Bit Error Rate (BER)", color="Red")
-    ber_ax.legend(loc="best")
 
     linestyles = ["solid", "dashed", "dashdot", "dotted"]
     for detector, style in zip(DETECTORS, linestyles):
@@ -155,11 +177,11 @@ def plot_pd_vs_ber(
     # pd_ax.axhline(good_pd, color='Blue', ls='--', label=f'Acceptable ℙd ({good_pd})')
     pd_ax.tick_params(axis="y", colors="Blue")
     pd_ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)", color="Blue")
-    pd_ax.legend(loc="best")
+    pd_ax.legend(loc=6)
     ax.set_xlabel("Signal to Noise Ratio dB (SNR dB)")
     if save:
-        fig.set_size_inches(16, 9)
-        fig.savefig(f'/tmp/ber_{modulation["name"]}.png')
+        fig.set_size_inches(*FIG_SIZE)
+        fig.savefig(save_dir / f'ber_{modulation["name"]}.png', bbox_inches="tight")
     ax.set_title(modulation["name"])
 
 
@@ -189,12 +211,11 @@ def parse_results(
                     df /= num_regressions
                 youden_js.append(max(abs(df["youden_j"])))
                 dfs.append(df)
-            except ValueError as err:
-                # youden_js.append(float('nan'))
-                # import pdb; pdb.set_trace()
+            except ValueError:
                 dfs.append(
                     pd.DataFrame(columns=["x", "y", "proba", "tpr", "fpr", "youden_j"])
                 )
+                # youden_js.append(float('nan'))
                 # youden_js.append(0)
                 youden_js.append(1)
         dx["youden_js"] = youden_js
@@ -204,27 +225,26 @@ def parse_results(
     return mod_res
 
 
-def plot_all_bers(bers: List[Dict[str, object]], save=False):
+def plot_all_bers(
+    bers: List[Dict[str, object]],
+    save=False,
+    save_dir=Path("/tmp/"),
+):
     fig, ax = plt.subplots(1)
-    ax.grid(True)
+    ax.set_xlabel("SNR (dB)")
+    ax.set_ylabel("BER")
+    ax.grid(True, which="both")
     ax.set_prop_cycle(get_cycles(len(bers)))
     for ber in bers:
         ax.plot(db(ber["snrs"]), ber["bers"], label=ber["name"])
-    ax.legend(loc="best")
+    ax.legend(loc="best", ncols=NCOLS)
     ax.set_yscale("log")
-    ax.set_xlabel("SNR (dB)")
-    ax.set_ylabel("BER")
+    ax.set_ylim(BER_YLIM)
+    ax.set_xlim([min(db(bers[0]["snrs"])), max(db(bers[0]["snrs"]))])
 
-    # ax.plot(
-    #     db(ber["snrs"]),
-    #     ber_bpsk(ber["snrs"]),
-    #     color="Blue",
-    #     ls="--",
-    #     label="BPSK (Theoretical)",
-    # )
     if save:
-        fig.set_size_inches(16, 9)
-        fig.savefig("/tmp/bers_multiple_modulations.png")
+        fig.set_size_inches(*FIG_SIZE)
+        fig.savefig(save_dir / "bers_multiple_modulations.png", bbox_inches="tight")
     ax.set_title("BER vs SNR (All Modulations)")
 
 
@@ -233,12 +253,16 @@ def plot_pd_vs_ber_metric(
     bers: List[Dict[str, object]],
     kind: str,
     save=False,
+    save_dir=Path("/tmp/"),
 ):
     fig, ax = plt.subplots()
-    ax.grid(True)
+    ax.grid(True, which="both")
     ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
     ax.set_xlabel(r"Probability of Detection ($\mathbb{P}_D$)")
     ax.set_ylabel("Bit Error Rate (BER)")
+    ax.set_yscale("log")
+    ax.set_xlim([0, 1])
+    ax.set_ylim([1e-2, 0.5])
     for modulation in modulation_test_results:
         try:
             mod_ber = next(b for b in bers if b["name"] == modulation["name"])
@@ -258,11 +282,11 @@ def plot_pd_vs_ber_metric(
         ax.plot(x[:r], y[:r], label=modulation["name"])
     ax.set_xlabel(r"Probability of Detection ($\mathbb{P}_D$)")
     ax.set_ylabel("Bit Error Rate (BER)")
-    ax.legend(loc="best")
+    ax.legend(loc="best", ncols=NCOLS)
 
     if save:
-        fig.set_size_inches(16, 9)
-        fig.savefig(f"/tmp/covert_metric_{kind}.png")
+        fig.set_size_inches(*FIG_SIZE)
+        fig.savefig(save_dir / f"covert_metric_{kind}.png", bbox_inches="tight")
     ax.set_title(f"{kind} Detector" + r" - BER vs $\mathbb{P}_D$")
 
 
@@ -270,12 +294,15 @@ def plot_pd_vs_pfa(
     results_object: List[Dict[str, object]],
     kind: str,
     save=False,
+    save_dir=Path("/tmp/"),
 ):
     fig, ax = plt.subplots()
-    ax.grid(True)
+    ax.grid(True, which="both")
     ax.set_prop_cycle(get_cycles(len(results_object)))
     ax.set_xlabel(r"Probability of False Alarm ($\mathbb{P}_{FA}$)")
     ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)")
+    ax.set_xlim([0, 1])
+    ax.set_ylim([0, 1])
     for modulation in results_object:
         try:
             p = modulation[kind]["df"]
@@ -287,11 +314,11 @@ def plot_pd_vs_pfa(
         y = p[mid]["fpr"]
         snr_db = db(modulation["snrs"][mid])
         ax.plot(x, y, label=f"{modulation["name"]}")
-    ax.legend(loc="best")
+    ax.legend(loc="best", ncols=NCOLS)
 
     if save:
-        fig.set_size_inches(16, 9)
-        fig.savefig(f"/tmp/pd_vs_pfa_{kind}_{snr_db}dB.png")
+        fig.set_size_inches(*FIG_SIZE)
+        fig.savefig(save_dir / f"pd_vs_pfa_{kind}_{snr_db}dB.png", bbox_inches="tight")
     ax.set_title(
         f"{kind}"
         + r"Detector - $\mathbb{P}_D$ vs $\mathbb{{P}}_{FA}$ - "
@@ -300,10 +327,13 @@ def plot_pd_vs_pfa(
 
 
 def plot_λ_vs_snr(
-    results_object: List[Dict[str, object]], kind: str, save: bool = False
+    results_object: List[Dict[str, object]],
+    kind: str,
+    save: bool = False,
+    save_dir=Path("/tmp/"),
 ):
     fig, ax = plt.subplots()
-    ax.grid(True)
+    ax.grid(True, which="both")
     ax.set_prop_cycle(get_cycles(len(results_object)))
     for modulation in results_object:
         try:
@@ -324,13 +354,14 @@ def plot_λ_vs_snr(
             λ0s.append(λ0)
 
         ax.plot(db(modulation["snrs"]), λ0s, label=f"{modulation['name']}")
+        ax.set_xlim(db(modulation["snrs"]).min(), db(modulation["snrs"]).max())
     ax.set_xlabel("SNR (dB)")
     ax.set_ylabel("Threshold λ")
-    ax.legend(loc="best")
+    ax.legend(loc="best", ncols=NCOLS)
 
     if save:
-        fig.set_size_inches(16, 9)
-        fig.savefig(f"/tmp/lambda_{kind}.png")
+        fig.set_size_inches(*FIG_SIZE)
+        fig.savefig(save_dir / f"lambda_{kind}.png", bbox_inches="tight")
     ax.set_title(f"Threshold vs SNR ({kind})")
 
 
@@ -351,6 +382,7 @@ def parse_args() -> Namespace:
     ap.add_argument("-l", "--log-regressions", default=1, type=int)
     ap.add_argument("-r", "--regex", default="", type=str)
     ap.add_argument("-s", "--save", action="store_true")
+    ap.add_argument("-d", "--save-dir", type=Path, default=Path("/tmp/"))
     ap.add_argument("--bers-only", action="store_true")
     return ap.parse_args()
 
@@ -362,7 +394,6 @@ if __name__ == "__main__":
 
     # import umsgpack
     import matplotlib.pyplot as plt
-    from pathlib import Path
 
     CWD: Path = Path(__file__).parent
 
@@ -373,6 +404,7 @@ if __name__ == "__main__":
     with timeit("Loading Data") as _:
         # Load from JSON.
         if not args.bers_only:
+            results_file_size = args.pd_file.stat().st_size
             with Path(args.pd_file).open("r") as f:
                 results = json.load(f)
                 # results = umsgpack.load(f, raw=True)
@@ -390,11 +422,19 @@ if __name__ == "__main__":
     if not args.bers_only:
         # Parse and Log Regress results.
         parse = partial(parse_results, num_regressions=args.log_regressions)
-        # regressed: List[Dict[str, object]] = list(map(parse, results))
-        with concurrent.futures.ProcessPoolExecutor() as p, timeit(
-            "Logistic Regresstion"
-        ) as _:
-            regressed: List[Dict[str, object]] = list(p.map(parse, results))
+
+        num_cpus: int = os.cpu_count()
+        ram: int = psutil.virtual_memory().available
+        num_workers = min(ram // results_file_size, num_cpus)
+
+        with timeit("Logistic Regresstion") as _:
+            if num_workers > 1:
+                with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=num_workers
+                ) as p:
+                    regressed: List[Dict[str, object]] = list(p.map(parse, results))
+            else:
+                regressed: List[Dict[str, object]] = list(map(parse, results))
         del results
         gc.collect()
 
@@ -404,19 +444,29 @@ if __name__ == "__main__":
 
             for detector in DETECTORS:
                 plot_youden_j_with_multiple_modulations(
-                    regressed, detector, save=args.save, title=args.pd_file.name
+                    regressed,
+                    detector,
+                    save=args.save,
+                    save_dir=args.save_dir,
+                    title=args.pd_file.name,
                 )
             for detector in DETECTORS:
-                plot_pd_vs_pfa(regressed, detector, save=args.save)
+                plot_pd_vs_pfa(
+                    regressed, detector, save=args.save, save_dir=args.save_dir
+                )
 
             for modulation in regressed:
-                plot_pd_vs_ber(modulation, bers, save=args.save)
+                plot_pd_vs_ber(modulation, bers, save=args.save, save_dir=args.save_dir)
 
             for detector in DETECTORS:
-                plot_λ_vs_snr(regressed, detector, save=args.save)
+                plot_λ_vs_snr(
+                    regressed, detector, save=args.save, save_dir=args.save_dir
+                )
 
             for detector in DETECTORS:
-                plot_pd_vs_ber_metric(regressed, bers, detector, save=args.save)
+                plot_pd_vs_ber_metric(
+                    regressed, bers, detector, save=args.save, save_dir=args.save_dir
+                )
 
     plot_all_bers(bers, save=args.save)
 

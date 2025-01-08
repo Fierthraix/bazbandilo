@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from foo import filter_results, parse_results
+from foo import filter_results, parse_results, FIG_SIZE
 from util import db, timeit, undb
 
 from argparse import ArgumentParser, Namespace
@@ -62,8 +62,8 @@ def plot_specific_snrs(
     plt.tight_layout()
 
     if save:
-        fig.set_size_inches(16, 9)
-        fig.savefig(f"/tmp/pdfs_energy_{modulation["name"]}.png")
+        fig.set_size_inches(*FIG_SIZE)
+        fig.savefig(f"/tmp/pdfs_energy_{modulation["name"]}.png", bbox_inches='tight')
 
 
 def plot_some_pdfs(
@@ -115,7 +115,7 @@ def plot_some_pdfs(
     plt.tight_layout()
 
     if save:
-        fig.set_size_inches(16, 9)
+        fig.set_size_inches(*FIG_SIZE)
         fig.savefig(f"/tmp/pdfs_energy_some_snrs_{modulation["name"]}.png")
 
 
@@ -176,8 +176,8 @@ if __name__ == "__main__":
 
     with timeit("Plotting") as _:
         for modulation in regressed:
-            plot_some_pdfs(modulation, n=args.num_plots, save=args.save)
-            # plot_specific_snrs(modulation, snrs=undb(np.array([6, -6, -18, -30])))
+            # plot_some_pdfs(modulation, n=args.num_plots, save=args.save)
+            plot_specific_snrs(modulation, snrs=undb(np.array([6, -6, -18, -30])), save=args.save)
 
     gc.collect()
     if not args.save:
