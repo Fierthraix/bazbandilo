@@ -468,7 +468,7 @@ if __name__ == "__main__":
                     regressed, bers, detector, save=args.save, save_dir=args.save_dir
                 )
 
-    plot_all_bers(bers, save=args.save)
+    plot_all_bers(bers, save=args.save, save_dir=args.save_dir)
 
     if not args.save:
         plt.show()
