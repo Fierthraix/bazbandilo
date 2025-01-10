@@ -231,6 +231,7 @@ def plot_all_bers(
     save_dir=Path("/tmp/"),
 ):
     fig, ax = plt.subplots(1)
+    # ax.set_xlabel(r"$\frac{E_b}{N_0}$ (dB)")
     ax.set_xlabel("SNR (dB)")
     ax.set_ylabel("BER")
     ax.grid(True, which="both")
@@ -245,6 +246,7 @@ def plot_all_bers(
     if save:
         fig.set_size_inches(*FIG_SIZE)
         fig.savefig(save_dir / "bers_multiple_modulations.png", bbox_inches="tight")
+    # ax.set_title(r"BER vs $\frac{E_b}{N_0}$ (All Modulations)")
     ax.set_title("BER vs SNR (All Modulations)")
 
 
@@ -388,6 +390,30 @@ def parse_args() -> Namespace:
 
 
 DETECTORS: List[str] = ["Energy", "MaxCut", "Dcs", "NormalTest"]
+
+MODULATIONS = [
+    "BPSK",
+    "QPSK",
+    "CDMA-BPSK-16",
+    "CDMA-QPSK-16",
+    "CDMA-QPSK-32",
+    "CDMA-QPSK-64",
+    "16QAM",
+    "64QAM",
+    "BFSK-16",
+    "BFSK-32",
+    "BFSK-64",
+    "OFDM-BPSK-16",
+    "OFDM-QPSK-16",
+    "OFDM-BPSK-64",
+    "OFDM-QPSK-64",
+    "CSS-16",
+    "CSS-64",
+    "CSK",
+    "DCSK",
+    "QCSK",
+    "FH-OFDM-DCSK",
+]
 
 if __name__ == "__main__":
     import json

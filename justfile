@@ -3,6 +3,7 @@ default: make
 alias b := ber
 alias c := clean
 alias f := foo
+alias g := goo
 alias i := interactive
 alias j := jupyter
 alias m := make
@@ -30,6 +31,10 @@ flamegraph arg:
 [no-cd]
 foo *args:
 	poetry run python3 -i {{ python_dir + "foo.py" }} {{ args }}
+
+[no-cd]
+goo *args:
+	poetry run python3 -i {{ python_dir + "goo.py" }} {{ args }}
 
 install:
 	poetry install
