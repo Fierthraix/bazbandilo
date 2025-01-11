@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 from foo import (
-    get_cycles,
     parse_results,
     FIG_SIZE,
     NCOLS,
@@ -9,6 +8,7 @@ from util import db, timeit
 
 from argparse import ArgumentParser, Namespace
 import concurrent.futures
+from cycler import cycler
 import gc
 from functools import partial
 import os
@@ -28,7 +28,7 @@ def plot_youden_j_with_multiple_modulations(
     ax.grid(True, which="both")
     ax.set_xlabel("SNR (db)")
     ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)")
-    ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
+    ax.set_prop_cycle(GROUP_MARKERS[group_id])
 
     snrs_db = db(modulation_test_results[0]["snrs"])
     ax.set_xlim(snrs_db.min(), snrs_db.max())
@@ -41,13 +41,14 @@ def plot_youden_j_with_multiple_modulations(
         except KeyError:
             print(f"{kind} detector not found.")
             return
-        ax.plot(db(snrs), youden_js, label=modulation["name"])
+        ax.plot(db(snrs), youden_js, label=modulation["name"], linestyle="dotted")
 
     ax.legend(loc="best", ncols=NCOLS)
     if save:
         fig.set_size_inches(*FIG_SIZE)
         fig.savefig(
-            save_dir / f"Youden-J_{kind}_multiple_modulations_group_{group_id}.png", bbox_inches="tight"
+            save_dir / f"Youden-J_{kind}_multiple_modulations_group_{group_id}.png",
+            bbox_inches="tight",
         )
     fig.suptitle(kind)
 
@@ -62,7 +63,7 @@ def plot_pd_vs_ber_metric(
 ):
     fig, ax = plt.subplots()
     ax.grid(True, which="both")
-    ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
+    ax.set_prop_cycle(GROUP_MARKERS[group_id])
     ax.set_xlabel(r"Probability of Detection ($\mathbb{P}_D$)")
     ax.set_ylabel("Bit Error Rate (BER)")
     ax.set_yscale("log")
@@ -91,7 +92,9 @@ def plot_pd_vs_ber_metric(
 
     if save:
         fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(save_dir / f"covert_metric_{kind}_group_{group_id}.png", bbox_inches="tight")
+        fig.savefig(
+            save_dir / f"covert_metric_{kind}_group_{group_id}.png", bbox_inches="tight"
+        )
     ax.set_title(f"{kind} Detector" + r" - BER vs $\mathbb{P}_D$")
 
 
@@ -104,7 +107,7 @@ def plot_pd_vs_pfa(
 ):
     fig, ax = plt.subplots()
     ax.grid(True, which="both")
-    ax.set_prop_cycle(get_cycles(len(results_object)))
+    ax.set_prop_cycle(GROUP_MARKERS[group_id])
     ax.set_xlabel(r"Probability of False Alarm ($\mathbb{P}_{FA}$)")
     ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)")
     ax.set_xlim([0, 1])
@@ -124,7 +127,10 @@ def plot_pd_vs_pfa(
 
     if save:
         fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(save_dir / f"pd_vs_pfa_{kind}_{snr_db}dB_group_{group_id}.png", bbox_inches="tight")
+        fig.savefig(
+            save_dir / f"pd_vs_pfa_{kind}_{snr_db}dB_group_{group_id}.png",
+            bbox_inches="tight",
+        )
     ax.set_title(
         f"{kind}"
         + r"Detector - $\mathbb{P}_D$ vs $\mathbb{{P}}_{FA}$ - "
@@ -141,7 +147,7 @@ def plot_λ_vs_snr(
 ):
     fig, ax = plt.subplots()
     ax.grid(True, which="both")
-    ax.set_prop_cycle(get_cycles(len(results_object)))
+    ax.set_prop_cycle(GROUP_MARKERS[group_id])
     for modulation in results_object:
         try:
             p = modulation[kind]["df"]
@@ -168,7 +174,9 @@ def plot_λ_vs_snr(
 
     if save:
         fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(save_dir / f"lambda_{kind}_group_{group_id}.png", bbox_inches="tight")
+        fig.savefig(
+            save_dir / f"lambda_{kind}_group_{group_id}.png", bbox_inches="tight"
+        )
     ax.set_title(f"Threshold vs SNR ({kind})")
 
 
@@ -219,6 +227,15 @@ GROUPS: Dict[int, List[str]] = {
     1: GROUP_1,
     2: GROUP_2,
     3: GROUP_3,
+}
+
+GROUP_MARKERS: Dict[int, cycler] = {
+    1: cycler(marker=["^", "v", "1", "2", "3", "4"])
+    + cycler(color=["r", "r", "blue", "blue", "green", "orange"]),
+    2: cycler(marker=["^", "v", "<", "1", "2", "3", "4"])
+    + cycler(color=["g", "g", "g", "r", "b", "r", "b"]),
+    3: cycler(marker=["^", "v", "1", "2", "3", "4"])
+    + cycler(color=["b", "b", "r", "y", "orange", "g"]),
 }
 
 
