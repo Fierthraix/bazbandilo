@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 from foo import (
-    parse_results,
+    BER_YLIM,
     FIG_SIZE,
     NCOLS,
+    parse_results,
 )
 from util import db, timeit
 
@@ -180,6 +181,33 @@ def plot_λ_vs_snr(
     ax.set_title(f"Threshold vs SNR ({kind})")
 
 
+def plot_all_bers(
+    bers: List[Dict[str, object]],
+    save=False,
+    save_dir=Path("/tmp/"),
+    group_id: int = 0,
+):
+    fig, ax = plt.subplots(1)
+    # ax.set_xlabel(r"$\frac{E_b}{N_0}$ (dB)")
+    ax.set_xlabel("SNR (dB)")
+    ax.set_ylabel("BER")
+    ax.grid(True, which="both")
+    ax.set_prop_cycle(GROUP_MARKERS[group_id])
+    for ber in bers:
+        ax.plot(db(ber["snrs"]), ber["bers"], label=ber["name"])
+    ax.legend(loc="best", ncols=NCOLS)
+    ax.set_yscale("log")
+    ax.set_ylim(BER_YLIM)
+    ax.set_xlim([min(db(bers[0]["snrs"])), max(db(bers[0]["snrs"]))])
+
+    if save:
+        fig.set_size_inches(*FIG_SIZE)
+        # fig.savefig(save_dir / f"bers_ebn0_group_{group_id}", bbox_inches="tight")
+        fig.savefig(save_dir / f"bers_snr_group_{group_id}", bbox_inches="tight")
+    # ax.set_title(r"BER vs $\frac{E_b}{N_0}$ (All Modulations)")
+    ax.set_title("BER vs SNR (All Modulations)")
+
+
 def parse_args() -> Namespace:
     ap = ArgumentParser()
     ap.add_argument(
@@ -253,89 +281,98 @@ if __name__ == "__main__":
     else:
         group_ids = [1, 2, 3]
 
-    grouped_results: List[List[Dict]] = []
-
     with timeit("Loading Data") as _:
-        results_file_size = args.pd_file.stat().st_size
-        with Path(args.pd_file).open("r") as f:
-            results = json.load(f)
-        # results = filter_results(results, regex)
-        grouped_results: List[List[Dict]] = [
-            [r for r in results if r["name"] in GROUPS[group_id]]
-            for group_id in group_ids
-        ]
-        del results
-        gc.collect()
+        if not args.bers_only:
+            results_file_size = args.pd_file.stat().st_size
+            with Path(args.pd_file).open("r") as f:
+                results = json.load(f)
+            grouped_results: List[List[Dict]] = [
+                [r for r in results if r["name"] in GROUPS[group_id]]
+                for group_id in group_ids
+            ]
+            del results
+            gc.collect()
 
         with Path(args.ber_file).open("r") as f:
             bers = json.load(f)
-        # bers = filter_results(bers, regex)
+        grouped_bers: List[List[Dict]] = [
+            [b for b in bers if b["name"] in GROUPS[group_id]] for group_id in group_ids
+        ]
 
+        del bers
         gc.collect()
 
-    # Parse and Log Regress results.
-    parse = partial(parse_results, num_regressions=args.log_regressions)
+    if not args.bers_only:
+        # Parse and Log Regress results.
+        parse = partial(parse_results, num_regressions=args.log_regressions)
 
-    num_cpus: int = os.cpu_count()
-    ram: int = psutil.virtual_memory().available
-    num_workers = min(ram // results_file_size, num_cpus)
+        num_cpus: int = os.cpu_count()
+        ram: int = psutil.virtual_memory().available
+        num_workers = min(ram // results_file_size, num_cpus)
 
-    with timeit("Logistic Regresstion") as _:
-        if num_workers > 1:
-            with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as p:
+        with timeit("Logistic Regresstion") as _:
+            if num_workers > 1:
+                with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=num_workers
+                ) as p:
+                    grouped_regress: List[List[Dict[str, object]]] = [
+                        list(p.map(parse, group)) for group in grouped_results
+                    ]
+            else:
                 grouped_regress: List[List[Dict[str, object]]] = [
-                    list(p.map(parse, group)) for group in grouped_results
+                    list(map(parse, group)) for group in grouped_results
                 ]
-        else:
-            grouped_regress: List[List[Dict[str, object]]] = [
-                list(map(parse, group)) for group in grouped_results
-            ]
-    del grouped_results
-    gc.collect()
+        del grouped_results
+        gc.collect()
 
-    DETECTORS = [k for k in grouped_regress[0][0].keys() if k not in ("name", "snrs")]
+        DETECTORS = [
+            k for k in grouped_regress[0][0].keys() if k not in ("name", "snrs")
+        ]
 
-    with timeit("Plotting") as _:
+        with timeit("Plotting") as _:
 
-        for group_id, regressed in zip(group_ids, grouped_regress):
+            for group_id, regressed in zip(group_ids, grouped_regress):
 
-            for detector in DETECTORS:
-                if detector == "Energy":
-                    continue
-                plot_youden_j_with_multiple_modulations(
-                    regressed,
-                    detector,
-                    save=args.save,
-                    save_dir=args.save_dir,
-                    group_id=group_id,
-                )
-            for detector in DETECTORS:
-                plot_pd_vs_pfa(
-                    regressed,
-                    detector,
-                    save=args.save,
-                    save_dir=args.save_dir,
-                    group_id=group_id,
-                )
+                for detector in DETECTORS:
+                    if detector == "Energy":
+                        continue
+                    plot_youden_j_with_multiple_modulations(
+                        regressed,
+                        detector,
+                        save=args.save,
+                        save_dir=args.save_dir,
+                        group_id=group_id,
+                    )
+                for detector in DETECTORS:
+                    plot_pd_vs_pfa(
+                        regressed,
+                        detector,
+                        save=args.save,
+                        save_dir=args.save_dir,
+                        group_id=group_id,
+                    )
 
-            for detector in DETECTORS:
-                plot_λ_vs_snr(
-                    regressed,
-                    detector,
-                    save=args.save,
-                    save_dir=args.save_dir,
-                    group_id=group_id,
-                )
+                for detector in DETECTORS:
+                    plot_λ_vs_snr(
+                        regressed,
+                        detector,
+                        save=args.save,
+                        save_dir=args.save_dir,
+                        group_id=group_id,
+                    )
 
-            for detector in DETECTORS:
-                plot_pd_vs_ber_metric(
-                    regressed,
-                    bers,
-                    detector,
-                    save=args.save,
-                    save_dir=args.save_dir,
-                    group_id=group_id,
-                )
+                for detector in DETECTORS:
+                    plot_pd_vs_ber_metric(
+                        regressed,
+                        bers,
+                        detector,
+                        save=args.save,
+                        save_dir=args.save_dir,
+                        group_id=group_id,
+                    )
+
+    for group_id, bers in zip(group_ids, grouped_bers):
+        plot_all_bers(bers, save=args.save, save_dir=args.save_dir, group_id=group_id)
 
     if not args.save:
         plt.show()
