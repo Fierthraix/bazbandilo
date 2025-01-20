@@ -67,8 +67,8 @@ const NUM_SAMPLES: usize = 65536;
 const NUM_BITS: usize = 65536;
 const NUM_ERRORS: usize = 100_000;
 // const NUM_ERRORS: usize = 100;
-// const BER_CUTOFF: f64 = 10e-4;
-const BER_CUTOFF: f64 = 10e-5;
+// const BER_CUTOFF: f64 = 1e-4;
+const BER_CUTOFF: f64 = 1e-5;
 
 macro_rules! BitErrorTest {
     ($name:expr, $tx_fn:expr, $rx_fn:expr, $snrs:expr) => {{
