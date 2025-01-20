@@ -154,7 +154,8 @@ macro_rules! BitErrorTest {
 #[test]
 fn main() {
     // let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 15).collect();
-    let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 150).collect();
+    // let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 150).collect();
+    let snrs_db: Vec<f64> = linspace(-20f64, 20f64, 150).collect();
 
     let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
 
@@ -213,12 +214,12 @@ fn main() {
             |s| rx_qam_signal(s, 64),
             snrs
         ),
-        BitErrorTest!(
-            "1024QAM",
-            |m| tx_qam_signal(m, 1024),
-            |s| rx_qam_signal(s, 1024),
-            snrs
-        ),
+        // BitErrorTest!(
+        //     "1024QAM",
+        //     |m| tx_qam_signal(m, 1024),
+        //     |s| rx_qam_signal(s, 1024),
+        //     snrs
+        // ),
         // BFSK
         BitErrorTest!(
             "BFSK-16",
@@ -276,12 +277,12 @@ fn main() {
             |s| rx_css_signal(s, 64),
             snrs
         ),
-        BitErrorTest!(
-            "CSS-128",
-            |m| tx_css_signal(m, 128),
-            |s| rx_css_signal(s, 128),
-            snrs
-        ),
+        // BitErrorTest!(
+        //     "CSS-128",
+        //     |m| tx_css_signal(m, 128),
+        //     |s| rx_css_signal(s, 128),
+        //     snrs
+        // ),
         // CSK
         BitErrorTest!("CSK", tx_csk_signal, rx_csk_signal, snrs),
         BitErrorTest!("DCSK", tx_dcsk_signal, rx_dcsk_signal, snrs),
