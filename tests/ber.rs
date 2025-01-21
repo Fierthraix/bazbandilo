@@ -66,7 +66,7 @@ impl BitErrorTest<'_> {
 const NUM_SAMPLES: usize = 65536;
 const NUM_BITS: usize = 65536;
 const NUM_ERRORS: usize = 100_000;
-// const NUM_ERRORS: usize = 100;
+// const NUM_ERRORS: usize = 1000;
 // const BER_CUTOFF: f64 = 1e-4;
 const BER_CUTOFF: f64 = 1e-5;
 
@@ -308,6 +308,7 @@ fn main() {
                 let mut writer = BufWriter::new(file);
                 serde_json::to_writer(&mut writer, &results).unwrap();
                 writer.flush().unwrap();
+                println!("Saved {}", name);
             }
         }
         results
