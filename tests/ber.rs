@@ -166,7 +166,7 @@ fn main() {
     let key_32 = h_32.key(2);
     let key_64 = h_64.key(2);
 
-    let bers = [
+    let harness = [
         // PSK
         BitErrorTest!("BPSK", tx_bpsk_signal, rx_bpsk_signal, snrs),
         BitErrorTest!("QPSK", tx_qpsk_signal, rx_qpsk_signal, snrs),
@@ -296,7 +296,22 @@ fn main() {
         ),
     ];
 
-    let bers: Vec<BitErrorResults> = bers.into_iter().map(|test| test.calc_bers()).collect();
+    let bers: Vec<BitErrorResults> = {
+        let mut results = Vec::with_capacity(harness.len());
+        for modulation in harness {
+            let result = modulation.calc_bers();
+            results.push(result);
+            {
+                // Save the results to a JSON file.
+                let name = "/tmp/bers.json";
+                let file = File::create(name).unwrap();
+                let mut writer = BufWriter::new(file);
+                serde_json::to_writer(&mut writer, &results).unwrap();
+                writer.flush().unwrap();
+            }
+        }
+        results
+    };
 
     let theory_bers = [
         ("BPSK", bers!(ber_bpsk, snrs)),
@@ -304,14 +319,6 @@ fn main() {
         ("FSK", bers!(ber_bfsk, snrs)),
         ("16QAM", bers!(|snr| ber_qam(snr, 16), snrs)),
     ];
-
-    {
-        // Save the results to a JSON file.
-        let file = File::create("/tmp/bers.json").unwrap();
-        let mut writer = BufWriter::new(file);
-        serde_json::to_writer(&mut writer, &bers).unwrap();
-        writer.flush().unwrap();
-    }
 
     Python::with_gil(|py| {
         let matplotlib = py.import("matplotlib").unwrap();
