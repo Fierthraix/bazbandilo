@@ -24,7 +24,8 @@ FIG_SIZE: Tuple[float, float] = (12, 7)
 
 NCOLS: int = 2
 
-BER_YLIM: List[float] = [1e-4, 0.55]
+# BER_YLIM: List[float] = [1e-4, 0.55]
+BER_YLIM: List[float] = [1e-5, 0.55]
 
 
 def log_regress(
@@ -241,7 +242,8 @@ def plot_all_bers(
     ax.legend(loc="best", ncols=NCOLS)
     ax.set_yscale("log")
     ax.set_ylim(BER_YLIM)
-    ax.set_xlim([min(db(bers[0]["snrs"])), max(db(bers[0]["snrs"]))])
+    # ax.set_xlim([min(db(bers[0]["snrs"])), max(db(bers[0]["snrs"]))])
+    ax.set_xlim([-20, 20])
 
     if save:
         fig.set_size_inches(*FIG_SIZE)

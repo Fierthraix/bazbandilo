@@ -56,7 +56,7 @@ def plot_youden_j_with_multiple_modulations(
 
 def plot_pd_vs_ber_metric(
     modulation_test_results: List[Dict[str, object]],
-    bers: List[Dict[str, object]],
+    bers: List[List[Dict[str, object]]],
     kind: str,
     save=False,
     save_dir=Path("/tmp/"),
@@ -198,7 +198,8 @@ def plot_all_bers(
     ax.legend(loc="best", ncols=NCOLS)
     ax.set_yscale("log")
     ax.set_ylim(BER_YLIM)
-    ax.set_xlim([min(db(bers[0]["snrs"])), max(db(bers[0]["snrs"]))])
+    # ax.set_xlim([min(db(bers[0]["snrs"])), max(db(bers[0]["snrs"]))])
+    ax.set_xlim([-20, 20])
 
     if save:
         fig.set_size_inches(*FIG_SIZE)
@@ -331,7 +332,7 @@ if __name__ == "__main__":
 
         with timeit("Plotting") as _:
 
-            for group_id, regressed in zip(group_ids, grouped_regress):
+            for group_id, regressed, bers in zip(group_ids, grouped_regress, grouped_bers):
 
                 for detector in DETECTORS:
                     if detector == "Energy":
