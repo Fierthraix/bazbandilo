@@ -44,9 +44,6 @@ install:
 jupyter:
 	poetry run jupyter lab
 
-pd:
-	cargo test --test pd -- --nocapture
-
 plop arg:
 	poetry run python3 -m plop.collector {{ arg }}
 
@@ -63,12 +60,3 @@ interactive *kargs:
 
 test arg:
 	cargo test --test {{ arg }} -- --nocapture
-
-run:
-	# @just ber
-	# cp /tmp/bers.json bers_curr.json
-	# cp /tmp/bers.msgpack bers_curr.msgpack
-	@just pd
-	cp /tmp/results.json results_curr.json
-	cp /tmp/results.msgpack results_curr.msgpack
-	@just i ./pitono/foo.py
