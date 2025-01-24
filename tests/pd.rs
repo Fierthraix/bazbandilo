@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
 use serde::{Deserialize, Serialize};
 
-use bazbandilo::{fam::fam, linspace, undb};
+use bazbandilo::{linspace, ssca::ssca_mapped, undb};
 
 pub const NUM_SAMPLES: usize = 65536;
 
@@ -54,7 +54,8 @@ pub fn run_detectors<I: Iterator<Item = Complex<f64>>>(signal: I) -> Vec<Detecto
     let n = 4096;
     let chan_signal: Vec<Complex<f64>> = signal.take(n + np).collect();
 
-    let sxf_fam = fam(&chan_signal, n + np, np);
+    // let sxf_fam = fam(&chan_signal, n + np, np);
+    let sxf_ssca = ssca_mapped(&chan_signal, n, np);
 
     vec![
         DetectorOutput {
@@ -63,11 +64,13 @@ pub fn run_detectors<I: Iterator<Item = Complex<f64>>>(signal: I) -> Vec<Detecto
         },
         DetectorOutput {
             kind: Detector::MaxCut,
-            λ: max_cut_detect(&sxf_fam),
+            // λ: max_cut_detect(&sxf_fam),
+            λ: max_cut_detect(&sxf_ssca),
         },
         DetectorOutput {
             kind: Detector::Dcs,
-            λ: dcs_detect_fam(&sxf_fam),
+            // λ: dcs_detect_fam(&sxf_fam),
+            λ: dcs_detect(&sxf_ssca),
         },
         DetectorOutput {
             kind: Detector::NormalTest,
