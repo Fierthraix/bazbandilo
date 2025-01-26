@@ -80,10 +80,11 @@ pub fn rx_ofdm_signal<I: Iterator<Item = Complex<f64>>>(
     let mut scratch = vec![Complex::zero(); fft.get_inplace_scratch_len()];
 
     message
-        .wchunks(subcarriers + cp_len) // S/P
+        // .wchunks(subcarriers + cp_len) // S/P
+        .wchunks(subcarriers) // S/P
         .flat_map(move |ofdm_symbol_data| {
-            // let mut buffer: Vec<Complex<f64>> = fftshift(&ofdm_symbol_data[cp_len..]); // CP Removal
-            let mut buffer: Vec<Complex<f64>> = Vec::from(&ofdm_symbol_data[cp_len..]); // CP Removal
+            // let mut buffer: Vec<Complex<f64>> = Vec::from(&ofdm_symbol_data[cp_len..]); // CP Removal
+            let mut buffer: Vec<Complex<f64>> = ofdm_symbol_data; // CP Removal
             fft.process_with_scratch(&mut buffer, &mut scratch); // IFFT
             let demoded = fftshift(&buffer);
 
