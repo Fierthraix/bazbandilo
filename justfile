@@ -1,7 +1,7 @@
 default: make
 
 alias b := ber
-alias c := clean
+alias c := cfar
 alias f := foo
 alias g := goo
 alias i := interactive
@@ -18,6 +18,10 @@ python_dir := justfile_directory() + "/pitono/"
 
 ber:
 	cargo test --test ber -- --nocapture
+
+[no-cd]
+cfar *args:
+	poetry run python3 -i {{ python_dir + "cfar.py" }} {{ args }}
 
 clean:
 	-rm "{{ ffi_dir }}"/*.so
