@@ -108,7 +108,6 @@ mod tests {
     use crate::Bit;
 
     #[test]
-    #[ignore] // TODO: FIXME: BUG:
     fn test_qpsk_ofdm() {
         let subcarriers = 64;
         let pilots = 12;
