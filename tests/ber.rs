@@ -132,25 +132,6 @@ macro_rules! BitErrorTest {
     }};
 }
 
-// macro_rules! rx_inflated {
-//     ($rx:expr, $signal:expr, $chunks:expr) => {{
-//         $rx($signal)
-//             .chunks($chunks)
-//             .map(|r_i| r_i.into_iter().map(bit_to_nrz).sum::<f64>() > 0f64)
-//     }};
-// }
-
-// fn rx_inflated_bpsk_signal<I: Iterator<Item = Complex<f64>>>(
-//     signal: I,
-//     chunks: usize,
-// ) -> impl Iterator<Item = Bit> {
-//     rx_bpsk_signal(
-//         signal
-//             .chunks(chunks)
-//             .map(|chunk| chunk.iter().sum::<Complex<f64>>() / chunk.len() as f64),
-//     )
-// }
-
 #[test]
 fn main() {
     // let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 15).collect();
