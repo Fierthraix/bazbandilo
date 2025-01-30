@@ -230,10 +230,13 @@ def plot_all_bers(
     bers: List[Dict[str, object]],
     save=False,
     save_dir=Path("/tmp/"),
+    ebn0: bool = False,
 ):
     fig, ax = plt.subplots(1)
-    # ax.set_xlabel(r"$\frac{E_b}{N_0}$ (dB)")
-    ax.set_xlabel("SNR (dB)")
+    if ebn0:
+        ax.set_xlabel(r"$\frac{E_b}{N_0}$ (dB)")
+    else:
+        ax.set_xlabel("SNR (dB)")
     ax.set_ylabel("BER")
     ax.grid(True, which="both")
     ax.set_prop_cycle(get_cycles(len(bers)))
@@ -248,8 +251,10 @@ def plot_all_bers(
     if save:
         fig.set_size_inches(*FIG_SIZE)
         fig.savefig(save_dir / "bers_multiple_modulations.png", bbox_inches="tight")
-    # ax.set_title(r"BER vs $\frac{E_b}{N_0}$ (All Modulations)")
-    ax.set_title("BER vs SNR (All Modulations)")
+    if ebn0:
+        ax.set_title(r"BER vs $\frac{E_b}{N_0}$ (All Modulations)")
+    else:
+        ax.set_title("BER vs SNR (All Modulations)")
 
 
 def plot_pd_vs_ber_metric(
@@ -388,6 +393,7 @@ def parse_args() -> Namespace:
     ap.add_argument("-s", "--save", action="store_true")
     ap.add_argument("-d", "--save-dir", type=Path, default=Path("/tmp/"))
     ap.add_argument("--bers-only", action="store_true")
+    ap.add_argument("--ebn0", action="store_true")
     return ap.parse_args()
 
 
@@ -466,7 +472,7 @@ if __name__ == "__main__":
         del results
         gc.collect()
 
-        DETECTORS = [k for k in regressed[0].keys() if k not in ("name", "snrs")]
+        # DETECTORS = [k for k in regressed[0].keys() if k not in ("name", "snrs")]
 
         with timeit("Plotting") as _:
 
@@ -496,7 +502,7 @@ if __name__ == "__main__":
                     regressed, bers, detector, save=args.save, save_dir=args.save_dir
                 )
 
-    plot_all_bers(bers, save=args.save, save_dir=args.save_dir)
+    plot_all_bers(bers, save=args.save, save_dir=args.save_dir, ebn0=args.ebn0)
 
     if not args.save:
         plt.show()

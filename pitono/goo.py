@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from foo import (
     BER_YLIM,
+    DETECTORS,
     FIG_SIZE,
     NCOLS,
     parse_results,
@@ -186,10 +187,13 @@ def plot_all_bers(
     save=False,
     save_dir=Path("/tmp/"),
     group_id: int = 0,
+    ebn0: bool = False,
 ):
     fig, ax = plt.subplots(1)
-    # ax.set_xlabel(r"$\frac{E_b}{N_0}$ (dB)")
-    ax.set_xlabel("SNR (dB)")
+    if ebn0:
+        ax.set_xlabel(r"$\frac{E_b}{N_0}$ (dB)")
+    else:
+        ax.set_xlabel("SNR (dB)")
     ax.set_ylabel("BER")
     ax.grid(True, which="both")
     ax.set_prop_cycle(GROUP_MARKERS[group_id])
@@ -203,10 +207,14 @@ def plot_all_bers(
 
     if save:
         fig.set_size_inches(*FIG_SIZE)
-        # fig.savefig(save_dir / f"bers_ebn0_group_{group_id}", bbox_inches="tight")
-        fig.savefig(save_dir / f"bers_snr_group_{group_id}", bbox_inches="tight")
-    # ax.set_title(r"BER vs $\frac{E_b}{N_0}$ (All Modulations)")
-    ax.set_title("BER vs SNR (All Modulations)")
+        if ebn0:
+            fig.savefig(save_dir / f"bers_ebn0_group_{group_id}", bbox_inches="tight")
+        else:
+            fig.savefig(save_dir / f"bers_snr_group_{group_id}", bbox_inches="tight")
+    if ebn0:
+        ax.set_title(r"BER vs $\frac{E_b}{N_0}$ (All Modulations)")
+    else:
+        ax.set_title("BER vs SNR (All Modulations)")
 
 
 def parse_args() -> Namespace:
@@ -222,6 +230,7 @@ def parse_args() -> Namespace:
     ap.add_argument("-d", "--save-dir", type=Path, default=Path("/tmp/"))
     ap.add_argument("-g", "--group", type=int, choices=(1, 2, 3), default=None)
     ap.add_argument("--bers-only", action="store_true")
+    ap.add_argument("--ebn0", action="store_true")
     return ap.parse_args()
 
 
@@ -326,13 +335,15 @@ if __name__ == "__main__":
         del grouped_results
         gc.collect()
 
-        DETECTORS = [
-            k for k in grouped_regress[0][0].keys() if k not in ("name", "snrs")
-        ]
+        # DETECTORS = [
+        #     k for k in grouped_regress[0][0].keys() if k not in ("name", "snrs")
+        # ]
 
         with timeit("Plotting") as _:
 
-            for group_id, regressed, bers in zip(group_ids, grouped_regress, grouped_bers):
+            for group_id, regressed, bers in zip(
+                group_ids, grouped_regress, grouped_bers
+            ):
 
                 for detector in DETECTORS:
                     if detector == "Energy":
@@ -373,7 +384,13 @@ if __name__ == "__main__":
                     )
 
     for group_id, bers in zip(group_ids, grouped_bers):
-        plot_all_bers(bers, save=args.save, save_dir=args.save_dir, group_id=group_id)
+        plot_all_bers(
+            bers,
+            save=args.save,
+            save_dir=args.save_dir,
+            group_id=group_id,
+            ebn0=args.ebn0,
+        )
 
     if not args.save:
         plt.show()

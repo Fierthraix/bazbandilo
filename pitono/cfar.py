@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 from foo import (
+    DETECTORS,
     FIG_SIZE,
     filter_results,
 )
@@ -125,7 +126,7 @@ if __name__ == "__main__":
     del results
     gc.collect()
 
-    DETECTORS = [k for k in regressed[0].keys() if k not in ("name", "snrs")]
+    # DETECTORS = [k for k in regressed[0].keys() if k not in ("name", "snrs")]
 
     with timeit("Plotting") as _:
         for modulation in regressed:
