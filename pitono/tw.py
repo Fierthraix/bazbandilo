@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from util import db, timeit
-from foo import get_cycles, log_regress
+from foo import get_cycles, log_regress, FIG_SIZE
 
 from argparse import ArgumentParser, Namespace
 import concurrent.futures
@@ -9,6 +9,7 @@ import gc
 import numpy as np
 import os
 import pandas as pd
+from pathlib import Path
 import psutil
 from tqdm import tqdm
 from typing import Dict, List
@@ -55,10 +56,12 @@ def parse_results(
 def plot_all_tws(
     modulation_test_results: List[Dict[str, object]],
     save=False,
+    save_dir=Path("/tmp/"),
 ):
     fig, ax = plt.subplots()
     ax.set_xlabel("SNR (db)")
     ax.set_ylabel("Youden J")
+    ax.grid(True, which="both")
 
     ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
     midline_snrs = []
@@ -80,8 +83,8 @@ def plot_all_tws(
 
     ax.legend(loc="best")
     if save:
-        fig.set_size_inches(16, 9)
-        fig.savefig("/tmp/Youden-J_different_TW_product.png")
+        fig.set_size_inches(*FIG_SIZE)
+        fig.savefig(save_dir / "different:tw:product.png", bbox_inches="tight")
     fig.suptitle("SNR vs PD - Different $TW$ products")
 
 
@@ -101,7 +104,7 @@ def plot_all_tws_old(
 
     if save:
         fig.set_size_inches(16, 9)
-        fig.savefig("/tmp/tw_snr_vs_pd.png")
+        fig.savefig("/tmp/tw_snr_vs_pd.png", bbox_inches="tight")
     ax.set_title(r"Energy Detector $\text{SNR}$ vs $\mathbb{{P}}_D$")
 
 
@@ -110,6 +113,7 @@ def parse_args() -> Namespace:
     ap.add_argument("-t", "--tw-file", default=CWD.parent / "tw.json", type=Path)
     ap.add_argument("-l", "--log-regressions", default=1, type=int)
     ap.add_argument("-s", "--save", action="store_true")
+    ap.add_argument("-d", "--save-dir", type=Path, default=Path("/tmp/"))
     return ap.parse_args()
 
 
@@ -117,9 +121,9 @@ DETECTORS: List[str] = ["Energy", "MaxCut", "Dcs", "NormalTest"]
 
 if __name__ == "__main__":
     import json
-
     import matplotlib.pyplot as plt
     from pathlib import Path
+    import sys
 
     CWD: Path = Path(__file__).parent
 
@@ -158,7 +162,11 @@ if __name__ == "__main__":
 
     with timeit("Plotting") as _:
 
-        plot_all_tws(regressed, save=args.save)
+        # plot_all_tws(regressed[1:-1], save=args.save, save_dir=args.save_dir)
+        plot_all_tws(regressed, save=args.save, save_dir=args.save_dir)
 
     if not args.save:
         plt.show()
+
+    if not sys.flags.interactive:
+        plt.close('all')
