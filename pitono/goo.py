@@ -237,6 +237,8 @@ def parse_args() -> Namespace:
 GROUP_1: List[str] = [
     "BPSK",
     "QPSK",
+    "16QAM",
+    "64QAM",
     "CDMA-BPSK-16",
     "CDMA-QPSK-16",
     "CDMA-QPSK-32",
@@ -268,8 +270,8 @@ GROUPS: Dict[int, List[str]] = {
 }
 
 GROUP_MARKERS: Dict[int, cycler] = {
-    1: cycler(marker=["^", "v", "1", "2", "3", "4"])
-    + cycler(color=["r", "r", "blue", "blue", "green", "orange"]),
+    1: cycler(marker=["^", "v", "+", "x", "1", "2", "3", "4"])
+    + cycler(color=["r", "r", "g", "g", "b", "b", "y", "orange"]),
     2: cycler(marker=["^", "v", "<", "1", "2", "3", "4"])
     + cycler(color=["g", "g", "g", "r", "b", "r", "b"]),
     3: cycler(marker=["^", "v", "1", "2", "3", "4"])
