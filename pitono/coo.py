@@ -64,7 +64,7 @@ def plot_cfar_with_multiple_modulations(
     for modulation in modulation_test_results:
         snrs = modulation["snrs"]
         try:
-            pfa, pds = next(iter(modulation[kind].items()))
+            pfa, pds = next(iter(modulation[kind]["pfas"].items()))
         except KeyError:
             print(f"{kind} detector not found.")
             return
@@ -74,7 +74,7 @@ def plot_cfar_with_multiple_modulations(
     if save:
         fig.set_size_inches(*FIG_SIZE)
         fig.savefig(
-            save_dir / f"cfar_{kind}_pfa_{pfa}_multiple_modulations.png",
+            save_dir / f"cfar_{kind}_pfa_{pfa}.png",
             bbox_inches="tight",
         )
     if title:
@@ -109,7 +109,7 @@ def plot_pd_vs_ber(
     linestyles = ["solid", "dashed", "dashdot", "dotted"]
     for detector, style in zip(DETECTORS, linestyles):
         try:
-            pfa, pds = next(iter(modulation[detector].items()))
+            pfa, pds = next(iter(modulation[detector]["pfas"].items()))
             pd_ax.plot(
                 db(modulation["snrs"]),
                 pds,
@@ -160,7 +160,7 @@ def plot_pd_vs_ber_metric(
             return
 
         try:
-            pfa, pds = next(iter(modulation[kind].items()))
+            pfa, pds = next(iter(modulation[kind]["pfas"].items()))
             x = pds
         except KeyError:
             print(f"{kind} detector not found")

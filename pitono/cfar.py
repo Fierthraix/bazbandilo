@@ -21,8 +21,12 @@ from typing import Dict, List
 
 def calculate_pd(pfa: float, h0_λs: List[float], h1_λs: List[float]) -> float:
     assert 0 <= pfa <= 1
-    λ0: float = np.quantile(h0_λs, 1 - pfa)
+    λ0: float = get_threshold(pfa, h0_λs)
     return np.mean([λ > λ0 for λ in h1_λs])
+
+
+def get_threshold(pfa: float, h0_λs: List[float]):
+    return np.quantile(h0_λs, 1 - pfa)
 
 
 def parse_results(
@@ -38,13 +42,12 @@ def parse_results(
             "kind": dx_result["kind"],
             "h0_λs": dx_result["h0_λs"],
             "h1_λs": dx_result["h1_λs"],
+            "pfas": defaultdict(list)
         }
-        pfa_map: Dict[float, List[float]] = defaultdict(list)
-
         for h0_λ, h1_λ in zip(dx["h0_λs"], dx["h1_λs"]):  # For each SNR.
             for pfa in pfas:
-                pfa_map[pfa].append(calculate_pd(pfa, h0_λ, h1_λ))
-        mod_res[dx_result["kind"]] = pfa_map
+                dx["pfas"][pfa].append(calculate_pd(pfa, h0_λ, h1_λ))
+        mod_res[dx_result["kind"]] = dx
     gc.collect()
     return mod_res
 
@@ -64,7 +67,7 @@ def plot_pd_vs_snr_cfar(
     snrs_db = db(modulation["snrs"])
     ax.set_xlim(snrs_db.min(), snrs_db.max())
     ax.set_ylim([0, 1.025])
-    for pfa, pds in modulation[kind].items():
+    for pfa, pds in modulation[kind]["pfas"].items():
         ax.plot(snrs_db, pds, label=f"$P_{{FA}}={pfa}$")
     ax.legend(loc="best")
     if save:
