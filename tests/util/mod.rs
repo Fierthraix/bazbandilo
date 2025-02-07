@@ -38,7 +38,7 @@ macro_rules! eb {
         let num_bits = 65536;
 
         let data = random_data($num_bits);
-        let tx_signal: Vec<Complex<f64>> = $tx_fn(data.iter().cloned()).collect();
+        let tx_signal: Vec<Complex<f64>> = $tx_fn(data.into_iter()).collect();
 
         let energy: f64 = tx_signal.iter().map(|&s_i| s_i.norm_sqr()).sum();
         let num_bits_received: usize = $rx_fn(tx_signal.iter().cloned()).fold(0, |acc, _| acc + 1);
