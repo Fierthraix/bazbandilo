@@ -1,22 +1,24 @@
-#!/usr/bin/env python
-from foo import (
+#!/usr/bin/env python3
+from util import timeit
+from plot import (
     DETECTORS,
-    FIG_SIZE,
-    filter_results,
+    base_parser,
+    get_cycles,
+    load_json,
+    multi_parse,
+    plot_pd_with_multiple_modulations,
+    plot_pd_vs_ber,
+    plot_pd_vs_ber_metric,
+    plot_λ_vs_snr,
 )
-from util import db, timeit
 
-from argparse import ArgumentParser, Namespace
+from argparse import Namespace
 from collections import defaultdict
-import concurrent.futures
-import gc
 from functools import partial
 import numpy as np
-import os
 from pathlib import Path
-import psutil
 import re
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 
 def calculate_pd(pfa: float, h0_λs: List[float], h1_λs: List[float]) -> float:
@@ -42,101 +44,103 @@ def parse_results(
             "kind": dx_result["kind"],
             "h0_λs": dx_result["h0_λs"],
             "h1_λs": dx_result["h1_λs"],
-            "pfas": defaultdict(list)
+            "pfas": defaultdict(list),
+            "λ0s": defaultdict(list),
         }
         for h0_λ, h1_λ in zip(dx["h0_λs"], dx["h1_λs"]):  # For each SNR.
             for pfa in pfas:
                 dx["pfas"][pfa].append(calculate_pd(pfa, h0_λ, h1_λ))
+                dx["λ0s"][pfa].append(get_threshold(pfa, h0_λ))
         mod_res[dx_result["kind"]] = dx
-    gc.collect()
     return mod_res
 
 
-def plot_pd_vs_snr_cfar(
-    modulation: Dict[str, object],
-    kind: str,
-    save=False,
-    save_dir=Path("/tmp/"),
-):
-    """Plot $P_D$ versus SNR for multiple $P_{FA}$s."""
-    fig, ax = plt.subplots()
-    ax.grid(True, which="both")
-    ax.set_xlabel("SNR (db)")
-    ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)")
-    # ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
-    snrs_db = db(modulation["snrs"])
-    ax.set_xlim(snrs_db.min(), snrs_db.max())
-    ax.set_ylim([0, 1.025])
-    for pfa, pds in modulation[kind]["pfas"].items():
-        ax.plot(snrs_db, pds, label=f"$P_{{FA}}={pfa}$")
-    ax.legend(loc="best")
-    if save:
-        fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(
-            save_dir / f'cfar_pd_vs_snr_{kind}_{modulation["name"]}.png',
-            bbox_inches="tight",
-        )
-    ax.set_title(f"{modulation["name"]} - {kind}")
+def get_thresholds(
+    pfa: float, regressed: List[Dict[str, object]], detector: str
+) -> List[Tuple[str, List[float]]]:
+    return [
+        (modulation["name"], modulation[detector]["λ0s"][pfa])
+        for modulation in regressed
+    ]
 
 
 def parse_args() -> Namespace:
-    ap = ArgumentParser()
-    ap.add_argument(
-        "-b", "--ber-file", default=CWD.parent / "bers_curr.json", type=Path
-    )
-    ap.add_argument(
-        "-p", "--pd-file", default=CWD.parent / "results_curr.json", type=Path
-    )
+    ap = base_parser()
+    ap.add_argument("-f", "--pfa", default=0.01, type=float)
     ap.add_argument("-r", "--regex", default="", type=str)
-    ap.add_argument("-s", "--save", action="store_true")
-    ap.add_argument("-d", "--save-dir", type=Path, default=Path("/tmp/"))
-    ap.add_argument("--ebn0", action="store_true")
     return ap.parse_args()
 
 
 if __name__ == "__main__":
-    import json
+    import gc
     import matplotlib.pyplot as plt
 
     CWD: Path = Path(__file__).parent
 
     args = parse_args()
 
-    regex = re.compile(args.regex)
-
     with timeit("Loading Data") as _:
-        # Load from JSON.
-        results_file_size = args.pd_file.stat().st_size
-        with Path(args.pd_file).open("r") as f:
-            results = json.load(f)
-        results = filter_results(results, regex)
-
+        regex: re.Pattern = re.compile(args.regex)
+        results: List[Dict[str, object]] = load_json(args.pd_file, filter=regex)
         gc.collect()
 
-    # Parse and Log Regress results.
-    parse = partial(parse_results, pfas=[0.25, 0.15, 0.1, 0.05, 0.01])
+        bers: List[Dict[str, object]] = load_json(args.ber_file, filter=regex)
+        gc.collect()
 
-    num_cpus: int = os.cpu_count()
-    ram: int = psutil.virtual_memory().available
-    num_workers = min(ram // results_file_size, num_cpus)
+    PFA: float = args.pfa
 
-    with timeit("Logistic Regresstion") as _:
-        if num_workers > 1:
-            with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as p:
-                regressed: List[Dict[str, object]] = list(p.map(parse, results))
-        else:
-            regressed: List[Dict[str, object]] = list(map(parse, results))
-    del results
-    gc.collect()
+    with timeit("CFAR Analysis") as _:
+        parse_fn = partial(parse_results, pfas=[PFA])
+        regressed: List[Dict[str, object]] = multi_parse(results, parse_fn)
+        del results
+        gc.collect()
 
-    # DETECTORS = [k for k in regressed[0].keys() if k not in ("name", "snrs")]
+    __dx = [k for k in regressed[0].keys() if k not in ("name", "snrs")]
+    if sorted(__dx) != sorted(DETECTORS):
+        DETECTORS = __dx
 
     with timeit("Plotting") as _:
+        for detector in DETECTORS:
+            plot_pd_with_multiple_modulations(
+                [(mod["name"], mod[detector]["pfas"][PFA]) for mod in regressed],
+                regressed[0]["snrs"],
+                save_path=args.save_dir / f"cfar_{detector}_pfa_{PFA}.png",
+                cycles=get_cycles(len(regressed)),
+            )
+
         for modulation in regressed:
-            for detector in DETECTORS:
-                plot_pd_vs_snr_cfar(
-                    modulation, detector, save=args.save, save_dir=args.save_dir
-                )
+            pds: List[Tuple[str, List[float]]] = [
+                (detector, modulation[detector]["pfas"][PFA]) for detector in DETECTORS
+            ]
+            plot_pd_vs_ber(
+                pds,
+                next(b["bers"] for b in bers if b["name"] == modulation["name"]),
+                modulation["snrs"],
+                save_path=args.save_dir / f'ber_{modulation["name"]}.png',
+            )
+
+        for detector in DETECTORS:
+            lambdas: List[float] = get_thresholds(PFA, regressed, detector)
+            plot_λ_vs_snr(
+                lambdas,
+                regressed[0]["snrs"],
+                save_path=args.save_dir / f"lambda_{detector}.png",
+                cycles=get_cycles(len(regressed)),
+            )
+
+        for detector in DETECTORS:
+            plot_pd_vs_ber_metric(
+                [
+                    (
+                        mod["name"],
+                        mod[detector]["pfas"][PFA],
+                        next(b["bers"] for b in bers if b["name"] == mod["name"]),
+                    )
+                    for mod in regressed
+                ],
+                save_path=args.save_dir / f"covert_metric_{detector}.png",
+                cycles=get_cycles(len(regressed)),
+            )
 
     if not args.save:
         plt.show()

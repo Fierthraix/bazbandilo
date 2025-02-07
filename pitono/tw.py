@@ -1,22 +1,25 @@
 #!/usr/bin/env python
-from util import db, timeit
-from foo import get_cycles, log_regress, FIG_SIZE
+from cfar import calculate_pd, get_threshold
+from util import timeit
+from plot import (
+    base_parser,
+    get_cycles,
+    load_json,
+    multi_parse,
+    plot_pd_with_multiple_modulations,
+)
 
-from argparse import ArgumentParser, Namespace
-import concurrent.futures
+from argparse import Namespace
+from collections import defaultdict
 from functools import partial
-import gc
 import numpy as np
-import os
-import pandas as pd
 from pathlib import Path
-import psutil
-from tqdm import tqdm
 from typing import Dict, List
 
 
 def parse_results(
-    modulation: Dict[str, object], num_regressions: int = 1
+    modulation: Dict[str, object],
+    pfas: List[float] = [0.1, 0.05, 0.01],
 ) -> Dict[str, object]:
     pow2 = int(modulation["num_samples"])
     mod_res = {
@@ -26,147 +29,59 @@ def parse_results(
     dx = {
         "h0_λs": modulation["results"]["h0_λs"],
         "h1_λs": modulation["results"]["h1_λs"],
+        "pfas": defaultdict(list),
+        "λ0s": defaultdict(list),
     }
-    youden_js = []
-    dfs = []
     for h0_λ, h1_λ in zip(dx["h0_λs"], dx["h1_λs"]):
-        try:
-            these_dfs = [log_regress(h0_λ, h1_λ) for _ in range(num_regressions)]
-            # df = log_regress(h0_λ, h1_λ)
-            df = these_dfs[0].copy()
-            if num_regressions > 1:
-                for df_i in these_dfs[1:]:
-                    df += df_i
-                df /= num_regressions
-            youden_js.append(max(abs(df["youden_j"])))
-            dfs.append(df)
-        except ValueError:
-            # youden_js.append(float('nan'))
-            dfs.append(
-                pd.DataFrame(columns=["x", "y", "proba", "tpr", "fpr", "youden_j"])
-            )
-            youden_js.append(0)
-    dx["youden_js"] = youden_js
-    dx["df"] = dfs
+        for pfa in pfas:
+            dx["pfas"][pfa].append(calculate_pd(pfa, h0_λ, h1_λ))
+            dx["λ0s"][pfa].append(get_threshold(pfa, h0_λ))
     mod_res["results"] = dx
-    gc.collect()
     return mod_res
 
 
-def plot_all_tws(
-    modulation_test_results: List[Dict[str, object]],
-    save=False,
-    save_dir=Path("/tmp/"),
-):
-    fig, ax = plt.subplots()
-    ax.set_xlabel("SNR (db)")
-    ax.set_ylabel("Youden J")
-    ax.grid(True, which="both")
-
-    ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
-    midline_snrs = []
-    for modulation in modulation_test_results:
-        snrs = modulation["snrs"]
-        youden_js: List[float] = np.array(modulation["results"]["youden_js"])
-        ax.plot(db(snrs), youden_js, label=modulation["name"])
-        pd = 0.5
-        midline = np.abs(youden_js - pd).argmin()
-        # ax.axvline(db(snrs[midline]), color="k", ls="--")
-        print(f"{modulation["name"]} - {db(snrs[midline])}")
-        midline_snrs.append(db(snrs[midline]))
-
-    midline_snrs = np.array(midline_snrs)
-    diffs = midline_snrs[:-1] - midline_snrs[1:]
-    print(f"Diffs: {diffs}")
-
-    print(f"Average: {np.average(diffs)}")
-
-    ax.legend(loc="best")
-    if save:
-        fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(save_dir / "different:tw:product.png", bbox_inches="tight")
-    fig.suptitle("SNR vs PD - Different $TW$ products")
-
-
-def plot_all_tws_old(
-    results_object: List[Dict[str, object]],
-    save=False,
-):
-    fig, ax = plt.subplots()
-    ax.set_prop_cycle(get_cycles(len(results_object)))
-    ax.set_xlabel(r"Signal-to-Noise Ration (SNR) (dB)")
-    ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)")
-    for modulation in results_object:
-        p = modulation["results"]["youden_j"]
-        snr_db = db(modulation["snrs"])
-        ax.plot(snr_db, p, label=f"{modulation["name"]}")
-    ax.legend(loc="best")
-
-    if save:
-        fig.set_size_inches(16, 9)
-        fig.savefig("/tmp/tw_snr_vs_pd.png", bbox_inches="tight")
-    ax.set_title(r"Energy Detector $\text{SNR}$ vs $\mathbb{{P}}_D$")
-
-
 def parse_args() -> Namespace:
-    ap = ArgumentParser()
+    ap = base_parser()
     ap.add_argument("-t", "--tw-file", default=CWD.parent / "tw.json", type=Path)
+    ap.add_argument("-f", "--pfa", default=0.01, type=float)
     ap.add_argument("-l", "--log-regressions", default=1, type=int)
-    ap.add_argument("-s", "--save", action="store_true")
-    ap.add_argument("-d", "--save-dir", type=Path, default=Path("/tmp/"))
     return ap.parse_args()
 
 
-DETECTORS: List[str] = ["Energy", "MaxCut", "Dcs", "NormalTest"]
-
 if __name__ == "__main__":
-    import json
+    import gc
     import matplotlib.pyplot as plt
-    from pathlib import Path
     import sys
 
     CWD: Path = Path(__file__).parent
 
-    args = parse_args()
+    args: Namespace = parse_args()
+    PFA: float = args.pfa
 
-    results_file = Path(args.tw_file)
-    results_file_size = results_file.stat().st_size
     with timeit("Loading Data") as _:
-        # Load from JSON.
-        with Path(args.tw_file).open("r") as f:
-            results = json.load(f)
-
-    gc.collect()
+        results: List[Dict[str, object]] = load_json(args.tw_file)
+        for modulation in results:
+            pow2 = int(modulation["num_samples"])
+            modulation["name"] = f"2^{int(np.log2(pow2))}"
+        gc.collect()
 
     # Parse and Log Regress results.
-    parse = partial(parse_results, num_regressions=args.log_regressions)
-
-    num_cpus: int = os.cpu_count()
-    ram: int = psutil.virtual_memory().available
-    num_workers = min(ram // results_file_size, num_cpus)
-
-    with timeit("Logistic Regression") as _:
-        if num_workers > 1:
-            with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as p:
-                regressed: List[Dict[str, object]] = list(p.map(parse, results))
-        else:
-            regressed: List[Dict[str, object]] = []
-            progress = tqdm(total=len(results))
-            for _ in range(len(results)):
-                regressed.append(parse(results.pop(0)))
-                progress.update(1)
-                gc.collect()
-
-    del results
-    gc.collect()
+    with timeit("CFAR Analysis") as _:
+        parse_fn = partial(parse_results, pfas=[PFA])
+        regressed = multi_parse(results, parse_fn)
+        del results
+        gc.collect()
 
     with timeit("Plotting") as _:
-
-        # plot_all_tws(regressed[1:-1], save=args.save, save_dir=args.save_dir)
-        plot_all_tws(regressed, save=args.save, save_dir=args.save_dir)
+        plot_pd_with_multiple_modulations(
+            [(mod["name"], mod["results"]["pfas"][PFA]) for mod in regressed],
+            regressed[0]["snrs"],
+            save_path=args.save_dir / "tw_snr_vs_pd.png",
+            cycles=get_cycles(len(regressed)),
+        )
 
     if not args.save:
         plt.show()
 
     if not sys.flags.interactive:
-        plt.close('all')
+        plt.close("all")

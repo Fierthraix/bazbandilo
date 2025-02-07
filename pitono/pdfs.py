@@ -1,11 +1,10 @@
 #!/usr/bin/env python
-from foo import filter_results, parse_results, FIG_SIZE
+from cfar import parse_results
+from plot import FIG_SIZE, base_parser, load_json, multi_parse
 from util import db, timeit, undb
 
-from argparse import ArgumentParser, Namespace
-import concurrent.futures
+from argparse import Namespace
 from functools import partial
-import gc
 import numpy as np
 import re
 from scipy.stats import rv_histogram
@@ -20,6 +19,7 @@ def get_closest_index(vec: List[object], index: object) -> int:
 def plot_specific_snrs(
     modulation: List[Dict[str, object]],
     snrs: List[float],
+    pfa: float,
     n: int = 16,
     save: bool = False,
 ):
@@ -48,10 +48,7 @@ def plot_specific_snrs(
         ax.plot(x, h0_pdf, label="$H_0$ case")
         ax.plot(x, h1_pdf, label="$H_1$ case")
 
-        df = modulation["Energy"]["df"][idx]
-        cut_off = (
-            df.sort_values(by="youden_j", ascending=False, ignore_index=True).iloc[0].x
-        )
+        cut_off = modulation["Energy"]["λ0s"][pfa][idx]
         ax.axvline(cut_off, color="k", ls="--")
 
         ax.set_title(f"SNR={int(db(snr))}dB")
@@ -63,11 +60,11 @@ def plot_specific_snrs(
 
     if save:
         fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(f"/tmp/pdfs_energy_{modulation["name"]}.png", bbox_inches='tight')
+        fig.savefig(f"/tmp/pdfs_energy_{modulation["name"]}.png", bbox_inches="tight")
 
 
 def plot_some_pdfs(
-    modulation: List[Dict[str, object]], n: int = 16, save: bool = False
+    modulation: List[Dict[str, object]], pfa: float, n: int = 16, save: bool = False
 ):
     m = int(np.sqrt(n))
     assert m**2 == n
@@ -85,12 +82,10 @@ def plot_some_pdfs(
 
         h0_mean = np.average(h0s)
         h1_mean = np.average(h1s)
-        # import pdb; pdb.set_trace()
         mean_point = np.average([h0_mean, h1_mean])
         xmin = min(h0s + h1s)
         xmax = max(h0s + h1s)
         x = np.linspace(xmin, xmax, binification)
-        # x = np.linspace(35, 100, binification)
         h0_pdf = rv_histogram(np.histogram(h0s, bins=binification)).pdf(x)
         h1_pdf = rv_histogram(np.histogram(h1s, bins=binification)).pdf(x)
 
@@ -98,10 +93,7 @@ def plot_some_pdfs(
         ax.plot(x, h0_pdf, label="$H_0$ case")
         ax.plot(x, h1_pdf, label="$H_1$ case")
 
-        df = modulation["Energy"]["df"][idx]
-        cut_off = (
-            df.sort_values(by="youden_j", ascending=False, ignore_index=True).iloc[0].x
-        )
+        cut_off = modulation["Energy"]["λ0s"][pfa][idx]
         ax.axvline(cut_off, color="k", ls="--")
         ax.axvline(mean_point, color="r", ls="-.")
 
@@ -120,9 +112,8 @@ def plot_some_pdfs(
 
 
 def parse_args() -> Namespace:
-    ap = ArgumentParser()
-    ap.add_argument("-p", "--pd-file", default=CWD.parent / "results_curr.json")
-    ap.add_argument("-l", "--log-regressions", default=1, type=int)
+    ap = base_parser()
+    ap.add_argument("-f", "--pfa", default=0.01, type=float)
     ap.add_argument(
         "-n",
         "--num-plots",
@@ -135,50 +126,43 @@ def parse_args() -> Namespace:
         # ),
     )
     ap.add_argument("-r", "--regex", default="")
-    ap.add_argument("-s", "--save", action="store_true")
     return ap.parse_args()
 
 
 if __name__ == "__main__":
-    import json
-
+    import gc
     import matplotlib.pyplot as plt
     from pathlib import Path
 
     CWD: Path = Path(__file__).parent
 
     args = parse_args()
+    PFA: float = args.pfa
 
     assert (
         int(np.sqrt(args.num_plots)) ** 2 == args.num_plots
     ), f"{args.num_plots} needs to be a square number"
 
-    regex = re.compile(args.regex)
-
     with timeit("Loading Data") as _:
-        # Load from JSON.
-        with Path(args.pd_file).open("r") as f:
-            results = json.load(f)
-            # results = umsgpack.load(f, raw=True)
-        results = filter_results(results, regex)
+        regex: re.Pattern = re.compile(args.regex)
+        results: List[Dict[str, object]] = load_json(args.pd_file, filter=regex)
+        gc.collect()
 
-    gc.collect()
-
-    parse = partial(parse_results, num_regressions=args.log_regressions)
-    # regressed: List[Dict[str, object]] = list(map(parse, results))
-    with concurrent.futures.ProcessPoolExecutor() as p, timeit(
-        "Logistic Regresstion"
-    ) as _:
-        regressed: List[Dict[str, object]] = list(p.map(parse, results))
-
-    del results
-    gc.collect()
+    with timeit("CFAR Analysis") as _:
+        parse_fn = partial(parse_results, pfas=[PFA])
+        regressed: List[Dict[str, object]] = multi_parse(results, parse_fn)
+        del results
+        gc.collect()
 
     with timeit("Plotting") as _:
         for modulation in regressed:
-            # plot_some_pdfs(modulation, n=args.num_plots, save=args.save)
-            plot_specific_snrs(modulation, snrs=undb(np.array([6, -6, -18, -30])), save=args.save)
+            # plot_some_pdfs(modulation, pfa=PFA, n=args.num_plots, save=args.save)
+            plot_specific_snrs(
+                modulation,
+                snrs=undb(np.array([6, -6, -18, -30])),
+                pfa=PFA,
+                save=args.save,
+            )
 
-    gc.collect()
     if not args.save:
         plt.show()
