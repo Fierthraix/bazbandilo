@@ -2,13 +2,9 @@ default: make
 
 alias b := ber
 alias c := cfar
-alias f := foo
-alias g := goo
 alias i := interactive
 alias j := jupyter
 alias m := make
-alias p := plop
-alias pv := plop_view
 alias s := shell
 alias t := test
 
@@ -29,38 +25,21 @@ clean:
 make:
 	poetry run maturin develop
 
-flamegraph arg:
-	poetry run python3 -m plop.collector -f flamegraph {{ arg }}
-
-[no-cd]
-foo *args:
-	poetry run python3 -i {{ python_dir + "foo.py" }} {{ args }}
-
-[no-cd]
-goo *args:
-	poetry run python3 -i {{ python_dir + "goo.py" }} {{ args }}
-
 install:
 	poetry install
 	cargo install maturin
 	@just make
 
+[no-cd]
+interactive *kargs:
+	poetry run python3 -i {{ kargs }}
+
 jupyter:
 	poetry run jupyter lab
-
-plop arg:
-	poetry run python3 -m plop.collector {{ arg }}
-
-plop_view:
-	poetry run python3 -m plop.viewer --datadir="{{ justfile_directory() + '/kom_py/profiles' }}"
 
 [no-cd]
 shell *kargs:
 	poetry run python3 {{ kargs }}
-
-[no-cd]
-interactive *kargs:
-	poetry run python3 -i {{ kargs }}
 
 test arg:
 	cargo test --test {{ arg }} -- --nocapture
