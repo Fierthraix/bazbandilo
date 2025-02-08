@@ -142,36 +142,30 @@ def plot_pd_with_multiple_modulations(
         ax.plot(db(snrs), pd_curve, label=name)
 
     ax.legend(loc="best", ncols=NCOLS)
-    if save_path:
-        fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(save_path, bbox_inches="tight")
+
+    save_figure(fig, save_path)
     ax.set_title(save_path.stem)
 
 
 def plot_pd_vs_snr_cfar(
     modulation: Dict[str, object],
     kind: str,
-    save=False,
-    save_dir=Path("/tmp/"),
+    save_path: Optional[Path] = None,
 ):
     """Plot $P_D$ versus SNR for multiple $P_{FA}$s."""
     fig, ax = plt.subplots()
     ax.grid(True, which="both")
     ax.set_xlabel("SNR (db)")
     ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)")
-    # ax.set_prop_cycle(get_cycles(len(modulation_test_results)))
+    ax.set_prop_cycle(get_cycles(len(modulation[kind]["pfas"])))
     snrs_db = db(modulation["snrs"])
     ax.set_xlim(snrs_db.min(), snrs_db.max())
     ax.set_ylim([0, 1.025])
     for pfa, pds in modulation[kind]["pfas"].items():
         ax.plot(snrs_db, pds, label=f"$P_{{FA}}={pfa}$")
     ax.legend(loc="best")
-    if save:
-        fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(
-            save_dir / f'cfar_pd_vs_snr_{kind}_{modulation["name"]}.png',
-            bbox_inches="tight",
-        )
+
+    save_figure(fig, save_path)
     ax.set_title(f"{modulation["name"]} - {kind}")
 
 
@@ -209,9 +203,8 @@ def plot_pd_vs_ber(
     pd_ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)", color="Blue")
     pd_ax.legend(loc=6)
     ax.set_xlabel("Signal to Noise Ratio dB (SNR dB)")
-    if save_path:
-        fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(save_path, bbox_inches="tight")
+
+    save_figure(fig, save_path)
     ax.set_title(save_path.stem)
 
 
@@ -237,9 +230,7 @@ def plot_bers(
     ax.set_ylim(BER_YLIM)
     ax.set_xlim([-20, 20])
 
-    if save_path:
-        fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(save_path, bbox_inches="tight")
+    save_figure(fig, save_path)
     if ebn0:
         ax.set_title(r"BER vs $\frac{E_b}{N_0}$" + f"{save_path.stem}")
     else:
@@ -267,9 +258,7 @@ def plot_pd_vs_ber_metric(
     ax.set_ylabel("Bit Error Rate (BER)")
     ax.legend(loc="best", ncols=NCOLS)
 
-    if save_path:
-        fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(save_path, bbox_inches="tight")
+    save_figure(fig, save_path)
     ax.set_title(r" - BER vs $\mathbb{P}_D$" + save_path.stem)
 
 
@@ -289,9 +278,7 @@ def plot_pd_vs_pfa(
         ax.plot(pds, pfas, label=mod_name)
     ax.legend(loc="best", ncols=NCOLS)
 
-    if save_path:
-        fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(save_path, bbox_inches="tight")
+    save_figure(fig, save_path)
     ax.set_title(
         r"Detector - $\mathbb{P}_D$ vs $\mathbb{{P}}_{FA}$ - " + save_path.stem
     )
@@ -314,10 +301,17 @@ def plot_λ_vs_snr(
     ax.set_ylabel("Threshold λ")
     ax.legend(loc="best", ncols=NCOLS)
 
-    if save_path:
-        fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(save_path, bbox_inches="tight")
+    save_figure(fig, save_path)
     ax.set_title(f"Threshold vs SNR ({save_path.stem})")
+
+
+def save_figure(fig: plt.Figure, save_path: Optional[Path]):
+    if not save_path:
+        return
+    if not save_path.parent.exists():
+        save_path.parent.mkdir(parents=True)
+    fig.set_size_inches(*FIG_SIZE)
+    fig.savefig(save_path, bbox_inches="tight")
 
 
 def filter_results(

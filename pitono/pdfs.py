@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from cfar import parse_results
-from plot import FIG_SIZE, base_parser, load_json, multi_parse
+from plot import FIG_SIZE, base_parser, load_json, multi_parse, save_figure
 from util import db, timeit, undb
 
 from argparse import Namespace
@@ -59,9 +59,7 @@ def plot_specific_snrs(
         ax.grid(True)
     plt.tight_layout()
 
-    if save_path:
-        fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(save_path, bbox_inches="tight")
+    save_figure(fig, save_path)
     ax.set_title(save_path.stem)
 
 
@@ -108,12 +106,10 @@ def plot_some_pdfs(
         ax.set_ylabel(r"$\mathbb{P}(\lambda)$")
         ax.legend(loc="best")
         ax.grid(True)
-    fig.suptitle(f"{modulation["name"]} - PDF of $H_0$ and $H_1$ cases")
     plt.tight_layout()
 
-    if save_path:
-        fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(f"/tmp/pdfs_energy_some_snrs_{modulation["name"]}.png")
+    save_figure(fig, save_path)
+    fig.suptitle(f"{modulation["name"]} - PDF of $H_0$ and $H_1$ cases")
 
 
 def parse_args() -> Namespace:
@@ -170,7 +166,8 @@ if __name__ == "__main__":
                     modulation,
                     snrs=undb(np.array([6, -6, -18, -30])),
                     pfa=pfa,
-                    save_path=args.save_dir / f"pdfs_energy_{modulation["name"]}_pfa_{pfa}.png",
+                    save_path=args.save_dir
+                    / f"pdfs_energy_{modulation["name"]}_pfa_{pfa}.png",
                 )
 
     if not args.save:
