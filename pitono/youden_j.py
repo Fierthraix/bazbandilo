@@ -160,8 +160,11 @@ def parse_args() -> Namespace:
 if __name__ == "__main__":
     import gc
     import matplotlib.pyplot as plt
+    import sys
 
     args = parse_args()
+
+    print("Starting Youden's J-Index Analysis...")
 
     with timeit("Loading Data") as _:
         regex = re.compile(args.regex)
@@ -235,3 +238,6 @@ if __name__ == "__main__":
 
     if not args.save:
         plt.show()
+
+    if not sys.flags.interactive:
+        plt.close("all")

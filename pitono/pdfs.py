@@ -124,11 +124,6 @@ def parse_args() -> Namespace:
         "--num-plots",
         default=16,
         type=int,
-        # type=lambda x: (
-        #     int(x)
-        #     if x == int(np.sqrt(int(x))) ** 2
-        #     else ArgumentTypeError(f"{x} is not a square number")
-        # ),
     )
     ap.add_argument("-r", "--regex", default="")
     return ap.parse_args()
@@ -138,6 +133,7 @@ if __name__ == "__main__":
     import gc
     import matplotlib.pyplot as plt
     from pathlib import Path
+    import sys
 
     CWD: Path = Path(__file__).parent
 
@@ -146,6 +142,8 @@ if __name__ == "__main__":
     assert (
         int(np.sqrt(args.num_plots)) ** 2 == args.num_plots
     ), f"{args.num_plots} needs to be a square number"
+
+    print("Starting Probability Distribution Function (PDF) Analysis...")
 
     with timeit("Loading Data") as _:
         regex: re.Pattern = re.compile(args.regex)
@@ -177,3 +175,6 @@ if __name__ == "__main__":
 
     if not args.save:
         plt.show()
+
+    if not sys.flags.interactive:
+        plt.close("all")

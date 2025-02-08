@@ -57,6 +57,8 @@ if __name__ == "__main__":
 
     args: Namespace = parse_args()
 
+    print("Starting TW Product Analysis...")
+
     with timeit("Loading Data") as _:
         results: List[Dict[str, object]] = load_json(args.tw_file)
         for modulation in results:
@@ -76,7 +78,7 @@ if __name__ == "__main__":
             plot_pd_with_multiple_modulations(
                 [(mod["name"], mod["results"]["pfas"][pfa]) for mod in regressed],
                 regressed[0]["snrs"],
-                save_path=args.save_dir / "tw_snr_vs_pd_pfa_{pfa}.png",
+                save_path=args.save_dir / f"tw_snr_vs_pd_pfa_{pfa}.png",
                 cycles=get_cycles(len(regressed)),
             )
 

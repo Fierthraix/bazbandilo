@@ -3,13 +3,14 @@ from cfar import parse_results
 from plot import (
     DETECTORS,
     FIG_SIZE,
+    base_parser,
     get_cycles,
     load_json,
     multi_parse,
 )
 from util import db, timeit
 
-from argparse import ArgumentParser, Namespace
+from argparse import Namespace
 from functools import partial
 from pathlib import Path
 import re
@@ -44,16 +45,9 @@ def plot_pd_vs_snr_cfar(
 
 
 def parse_args() -> Namespace:
-    ap = ArgumentParser()
-    ap.add_argument(
-        "-b", "--ber-file", default=CWD.parent / "bers_curr.json", type=Path
-    )
-    ap.add_argument(
-        "-p", "--pd-file", default=CWD.parent / "results_curr.json", type=Path
-    )
+    ap = base_parser()
     ap.add_argument("-r", "--regex", default="", type=str)
-    ap.add_argument("-s", "--save", action="store_true")
-    ap.add_argument("-d", "--save-dir", type=Path, default=Path("/tmp/"))
+    ap.add_argument("-f", "--pfa", default=[0.25, 0.15, 0.1, 0.05, 0.01], type=float, nargs="+")
     ap.add_argument("--ebn0", action="store_true")
     return ap.parse_args()
 
@@ -61,10 +55,13 @@ def parse_args() -> Namespace:
 if __name__ == "__main__":
     import gc
     import matplotlib.pyplot as plt
+    import sys
 
     CWD: Path = Path(__file__).parent
 
     args = parse_args()
+
+    print("Starting CFAR Analysis...")
 
     with timeit("Loading Data") as _:
         regex = re.compile(args.regex)
@@ -73,7 +70,7 @@ if __name__ == "__main__":
 
     # Parse and Log Regress results.
     with timeit("Logistic Regresstion") as _:
-        parse_fn = partial(parse_results, pfas=[0.25, 0.15, 0.1, 0.05, 0.01])
+        parse_fn = partial(parse_results, pfas=args.pfa)
         regressed: List[Dict[str, object]] = multi_parse(results, parse_fn)
         del results
         gc.collect()
@@ -91,3 +88,6 @@ if __name__ == "__main__":
 
     if not args.save:
         plt.show()
+
+    if not sys.flags.interactive:
+        plt.close("all")

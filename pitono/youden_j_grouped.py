@@ -33,12 +33,15 @@ def parse_args() -> Namespace:
 if __name__ == "__main__":
     import gc
     import matplotlib.pyplot as plt
+    import sys
 
     args = parse_args()
     if args.group:
         group_ids = [args.group]
     else:
         group_ids = [1, 2, 3]
+
+    print("Starting Youden's J-Index Analysis...")
 
     with timeit("Loading Data") as _:
         results: List[Dict[str, object]] = load_json(args.pd_file)
@@ -123,3 +126,6 @@ if __name__ == "__main__":
 
     if not args.save:
         plt.show()
+
+    if not sys.flags.interactive:
+        plt.close("all")
