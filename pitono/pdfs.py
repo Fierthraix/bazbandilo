@@ -7,8 +7,9 @@ from argparse import Namespace
 from functools import partial
 import numpy as np
 import re
+from pathlib import Path
 from scipy.stats import rv_histogram
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
 def get_closest_index(vec: List[object], index: object) -> int:
@@ -21,7 +22,7 @@ def plot_specific_snrs(
     snrs: List[float],
     pfa: float,
     n: int = 16,
-    save: bool = False,
+    save_path: Optional[Path] = None,
 ):
     n = len(snrs)
     m = int(np.sqrt(n))
@@ -58,13 +59,17 @@ def plot_specific_snrs(
         ax.grid(True)
     plt.tight_layout()
 
-    if save:
+    if save_path:
         fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(f"/tmp/pdfs_energy_{modulation["name"]}.png", bbox_inches="tight")
+        fig.savefig(save_path, bbox_inches="tight")
+    ax.set_title(save_path.stem)
 
 
 def plot_some_pdfs(
-    modulation: List[Dict[str, object]], pfa: float, n: int = 16, save: bool = False
+    modulation: List[Dict[str, object]],
+    pfa: float,
+    n: int = 16,
+    save_path: Optional[Path] = None,
 ):
     m = int(np.sqrt(n))
     assert m**2 == n
@@ -82,7 +87,6 @@ def plot_some_pdfs(
 
         h0_mean = np.average(h0s)
         h1_mean = np.average(h1s)
-        mean_point = np.average([h0_mean, h1_mean])
         xmin = min(h0s + h1s)
         xmax = max(h0s + h1s)
         x = np.linspace(xmin, xmax, binification)
@@ -95,6 +99,7 @@ def plot_some_pdfs(
 
         cut_off = modulation["Energy"]["λ0s"][pfa][idx]
         ax.axvline(cut_off, color="k", ls="--")
+        mean_point = np.average([h0_mean, h1_mean])
         ax.axvline(mean_point, color="r", ls="-.")
 
         snr = modulation["snrs"][idx]
@@ -106,7 +111,7 @@ def plot_some_pdfs(
     fig.suptitle(f"{modulation["name"]} - PDF of $H_0$ and $H_1$ cases")
     plt.tight_layout()
 
-    if save:
+    if save_path:
         fig.set_size_inches(*FIG_SIZE)
         fig.savefig(f"/tmp/pdfs_energy_some_snrs_{modulation["name"]}.png")
 
@@ -156,12 +161,18 @@ if __name__ == "__main__":
 
     with timeit("Plotting") as _:
         for modulation in regressed:
-            # plot_some_pdfs(modulation, pfa=PFA, n=args.num_plots, save=args.save)
+            plot_some_pdfs(
+                modulation,
+                pfa=PFA,
+                n=args.num_plots,
+                save_path=args.save_dir
+                / f"pdfs_energy_some_snrs_{modulation["name"]}.png",
+            )
             plot_specific_snrs(
                 modulation,
                 snrs=undb(np.array([6, -6, -18, -30])),
                 pfa=PFA,
-                save=args.save,
+                save_path=args.save_dir / f"pdfs_energy_{modulation["name"]}.png",
             )
 
     if not args.save:
