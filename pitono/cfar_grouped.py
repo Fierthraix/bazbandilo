@@ -23,7 +23,7 @@ from typing import Dict, List
 
 def parse_args() -> Namespace:
     ap = base_parser()
-    ap.add_argument("-f", "--pfa", default=0.01, type=float)
+    ap.add_argument("-f", "--pfa", default=[0.01], type=float, nargs="+")
     ap.add_argument("-g", "--group", type=int, choices=(1, 2, 3), default=None)
     return ap.parse_args()
 
@@ -54,11 +54,9 @@ if __name__ == "__main__":
         del bers
         gc.collect()
 
-    PFA: float = args.pfa
-
     # Parse and Log Regress results.
     with timeit("CFAR Analysis.") as _:
-        parse_fn = partial(parse_results, pfas=[PFA])
+        parse_fn = partial(parse_results, pfas=args.pfa)
         grouped_regress: List[List[Dict[str, object]]] = multi_parse_grouped(
             grouped_results, parse_fn
         )
@@ -70,40 +68,49 @@ if __name__ == "__main__":
         DETECTORS = __dx
 
     with timeit("Plotting") as _:
+        for pfa in args.pfa:
+            for group_id, regressed, bers in zip(
+                group_ids, grouped_regress, grouped_bers
+            ):
 
-        for group_id, regressed, bers in zip(group_ids, grouped_regress, grouped_bers):
+                for detector in DETECTORS:
+                    plot_pd_with_multiple_modulations(
+                        [
+                            (mod["name"], mod[detector]["pfas"][pfa])
+                            for mod in regressed
+                        ],
+                        regressed[0]["snrs"],
+                        save_path=args.save_dir
+                        / f"cfar_{detector}_group_{group_id}_pfa_{pfa}.png",
+                        cycles=GROUP_MARKERS[group_id],
+                    )
 
-            for detector in DETECTORS:
-                plot_pd_with_multiple_modulations(
-                    [(mod["name"], mod[detector]["pfas"][PFA]) for mod in regressed],
-                    regressed[0]["snrs"],
-                    save_path=args.save_dir
-                    / f"cfar_{detector}_pfa_{PFA}_group_{group_id}.png",
-                    cycles=GROUP_MARKERS[group_id],
-                )
+                for detector in DETECTORS:
+                    lambdas: List[float] = get_thresholds(pfa, regressed, detector)
+                    plot_λ_vs_snr(
+                        lambdas,
+                        regressed[0]["snrs"],
+                        save_path=args.save_dir
+                        / f"lambda_{detector}_group_{group_id}_pfa_{pfa}.png",
+                        cycles=GROUP_MARKERS[group_id],
+                    )
 
-            for detector in DETECTORS:
-                lambdas: List[float] = get_thresholds(PFA, regressed, detector)
-                plot_λ_vs_snr(
-                    lambdas,
-                    regressed[0]["snrs"],
-                    save_path=args.save_dir / f"lambda_{detector}_group_{group_id}.png",
-                    cycles=GROUP_MARKERS[group_id],
-                )
-
-            for detector in DETECTORS:
-                plot_pd_vs_ber_metric(
-                    [
-                        (
-                            mod["name"],
-                            mod[detector]["pfas"][PFA],
-                            next(b["bers"] for b in bers if b["name"] == mod["name"]),
-                        )
-                        for mod in regressed
-                    ],
-                    save_path=args.save_dir / f"covert_metric_{detector}.png",
-                    cycles=GROUP_MARKERS[group_id],
-                )
+                for detector in DETECTORS:
+                    plot_pd_vs_ber_metric(
+                        [
+                            (
+                                mod["name"],
+                                mod[detector]["pfas"][pfa],
+                                next(
+                                    b["bers"] for b in bers if b["name"] == mod["name"]
+                                ),
+                            )
+                            for mod in regressed
+                        ],
+                        save_path=args.save_dir
+                        / f"covert_metric_{detector}_pfa_{pfa}.png",
+                        cycles=GROUP_MARKERS[group_id],
+                    )
 
     if not args.save:
         plt.show()

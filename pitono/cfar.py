@@ -66,7 +66,7 @@ def get_thresholds(
 
 def parse_args() -> Namespace:
     ap = base_parser()
-    ap.add_argument("-f", "--pfa", default=0.01, type=float)
+    ap.add_argument("-f", "--pfa", default=[0.01], type=float, nargs="+")
     ap.add_argument("-r", "--regex", default="", type=str)
     return ap.parse_args()
 
@@ -87,10 +87,8 @@ if __name__ == "__main__":
         bers: List[Dict[str, object]] = load_json(args.ber_file, filter=regex)
         gc.collect()
 
-    PFA: float = args.pfa
-
     with timeit("CFAR Analysis") as _:
-        parse_fn = partial(parse_results, pfas=[PFA])
+        parse_fn = partial(parse_results, pfas=args.pfa)
         regressed: List[Dict[str, object]] = multi_parse(results, parse_fn)
         del results
         gc.collect()
@@ -100,47 +98,49 @@ if __name__ == "__main__":
         DETECTORS = __dx
 
     with timeit("Plotting") as _:
-        for detector in DETECTORS:
-            plot_pd_with_multiple_modulations(
-                [(mod["name"], mod[detector]["pfas"][PFA]) for mod in regressed],
-                regressed[0]["snrs"],
-                save_path=args.save_dir / f"cfar_{detector}_pfa_{PFA}.png",
-                cycles=get_cycles(len(regressed)),
-            )
+        for pfa in args.pfa:
+            for detector in DETECTORS:
+                plot_pd_with_multiple_modulations(
+                    [(mod["name"], mod[detector]["pfas"][pfa]) for mod in regressed],
+                    regressed[0]["snrs"],
+                    save_path=args.save_dir / f"cfar_{detector}_pfa_{pfa}.png",
+                    cycles=get_cycles(len(regressed)),
+                )
 
-        for modulation in regressed:
-            pds: List[Tuple[str, List[float]]] = [
-                (detector, modulation[detector]["pfas"][PFA]) for detector in DETECTORS
-            ]
-            plot_pd_vs_ber(
-                pds,
-                next(b["bers"] for b in bers if b["name"] == modulation["name"]),
-                modulation["snrs"],
-                save_path=args.save_dir / f'ber_{modulation["name"]}.png',
-            )
+            for modulation in regressed:
+                pds: List[Tuple[str, List[float]]] = [
+                    (detector, modulation[detector]["pfas"][pfa])
+                    for detector in DETECTORS
+                ]
+                plot_pd_vs_ber(
+                    pds,
+                    next(b["bers"] for b in bers if b["name"] == modulation["name"]),
+                    modulation["snrs"],
+                    save_path=args.save_dir / f'ber_{modulation["name"]}_pfa_{pfa}.png',
+                )
 
-        for detector in DETECTORS:
-            lambdas: List[float] = get_thresholds(PFA, regressed, detector)
-            plot_λ_vs_snr(
-                lambdas,
-                regressed[0]["snrs"],
-                save_path=args.save_dir / f"lambda_{detector}.png",
-                cycles=get_cycles(len(regressed)),
-            )
+            for detector in DETECTORS:
+                lambdas: List[float] = get_thresholds(pfa, regressed, detector)
+                plot_λ_vs_snr(
+                    lambdas,
+                    regressed[0]["snrs"],
+                    save_path=args.save_dir / f"lambda_{detector}_pfa_{pfa}.png",
+                    cycles=get_cycles(len(regressed)),
+                )
 
-        for detector in DETECTORS:
-            plot_pd_vs_ber_metric(
-                [
-                    (
-                        mod["name"],
-                        mod[detector]["pfas"][PFA],
-                        next(b["bers"] for b in bers if b["name"] == mod["name"]),
-                    )
-                    for mod in regressed
-                ],
-                save_path=args.save_dir / f"covert_metric_{detector}.png",
-                cycles=get_cycles(len(regressed)),
-            )
+            for detector in DETECTORS:
+                plot_pd_vs_ber_metric(
+                    [
+                        (
+                            mod["name"],
+                            mod[detector]["pfas"][pfa],
+                            next(b["bers"] for b in bers if b["name"] == mod["name"]),
+                        )
+                        for mod in regressed
+                    ],
+                    save_path=args.save_dir / f"covert_metric_{detector}_pfa_{pfa}.png",
+                    cycles=get_cycles(len(regressed)),
+                )
 
     if not args.save:
         plt.show()

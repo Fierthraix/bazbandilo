@@ -118,7 +118,7 @@ def plot_some_pdfs(
 
 def parse_args() -> Namespace:
     ap = base_parser()
-    ap.add_argument("-f", "--pfa", default=0.01, type=float)
+    ap.add_argument("-f", "--pfa", default=[0.01], type=float, nargs="+")
     ap.add_argument(
         "-n",
         "--num-plots",
@@ -142,7 +142,6 @@ if __name__ == "__main__":
     CWD: Path = Path(__file__).parent
 
     args = parse_args()
-    PFA: float = args.pfa
 
     assert (
         int(np.sqrt(args.num_plots)) ** 2 == args.num_plots
@@ -154,26 +153,27 @@ if __name__ == "__main__":
         gc.collect()
 
     with timeit("CFAR Analysis") as _:
-        parse_fn = partial(parse_results, pfas=[PFA])
+        parse_fn = partial(parse_results, pfas=args.pfa)
         regressed: List[Dict[str, object]] = multi_parse(results, parse_fn)
         del results
         gc.collect()
 
     with timeit("Plotting") as _:
-        for modulation in regressed:
-            plot_some_pdfs(
-                modulation,
-                pfa=PFA,
-                n=args.num_plots,
-                save_path=args.save_dir
-                / f"pdfs_energy_some_snrs_{modulation["name"]}.png",
-            )
-            plot_specific_snrs(
-                modulation,
-                snrs=undb(np.array([6, -6, -18, -30])),
-                pfa=PFA,
-                save_path=args.save_dir / f"pdfs_energy_{modulation["name"]}.png",
-            )
+        for pfa in args.pfa:
+            for modulation in regressed:
+                plot_some_pdfs(
+                    modulation,
+                    pfa=pfa,
+                    n=args.num_plots,
+                    save_path=args.save_dir
+                    / f"pdfs_energy_some_snrs_{modulation["name"]}_pfa_{pfa}.png",
+                )
+                plot_specific_snrs(
+                    modulation,
+                    snrs=undb(np.array([6, -6, -18, -30])),
+                    pfa=pfa,
+                    save_path=args.save_dir / f"pdfs_energy_{modulation["name"]}_pfa_{pfa}.png",
+                )
 
     if not args.save:
         plt.show()

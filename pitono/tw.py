@@ -43,7 +43,7 @@ def parse_results(
 def parse_args() -> Namespace:
     ap = base_parser()
     ap.add_argument("-t", "--tw-file", default=CWD.parent / "tw.json", type=Path)
-    ap.add_argument("-f", "--pfa", default=0.01, type=float)
+    ap.add_argument("-f", "--pfa", default=[0.01], type=float, nargs="+")
     ap.add_argument("-l", "--log-regressions", default=1, type=int)
     return ap.parse_args()
 
@@ -56,7 +56,6 @@ if __name__ == "__main__":
     CWD: Path = Path(__file__).parent
 
     args: Namespace = parse_args()
-    PFA: float = args.pfa
 
     with timeit("Loading Data") as _:
         results: List[Dict[str, object]] = load_json(args.tw_file)
@@ -67,18 +66,19 @@ if __name__ == "__main__":
 
     # Parse and Log Regress results.
     with timeit("CFAR Analysis") as _:
-        parse_fn = partial(parse_results, pfas=[PFA])
+        parse_fn = partial(parse_results, pfas=args.pfa)
         regressed = multi_parse(results, parse_fn)
         del results
         gc.collect()
 
     with timeit("Plotting") as _:
-        plot_pd_with_multiple_modulations(
-            [(mod["name"], mod["results"]["pfas"][PFA]) for mod in regressed],
-            regressed[0]["snrs"],
-            save_path=args.save_dir / "tw_snr_vs_pd.png",
-            cycles=get_cycles(len(regressed)),
-        )
+        for pfa in args.pfa:
+            plot_pd_with_multiple_modulations(
+                [(mod["name"], mod["results"]["pfas"][pfa]) for mod in regressed],
+                regressed[0]["snrs"],
+                save_path=args.save_dir / "tw_snr_vs_pd_pfa_{pfa}.png",
+                cycles=get_cycles(len(regressed)),
+            )
 
     if not args.save:
         plt.show()
