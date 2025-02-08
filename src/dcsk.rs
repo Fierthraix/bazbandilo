@@ -44,14 +44,12 @@ pub fn rx_qcsk_signal<I: Iterator<Item = Complex<f64>>>(message: I) -> impl Iter
 mod tests {
 
     use super::*;
-    extern crate rand;
-    use crate::dcsk::tests::rand::Rng;
+    use crate::random_bits;
 
     #[test]
     fn dcsk_signal() {
-        let mut rng = rand::thread_rng();
         let num_bits = 9001;
-        let data_bits: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+        let data_bits: Vec<Bit> = random_bits(num_bits);
 
         let dcsk_tx: Vec<Complex<f64>> = tx_dcsk_signal(data_bits.iter().cloned()).collect();
         let dcsk_rx: Vec<Bit> = rx_dcsk_signal(dcsk_tx.iter().cloned()).collect();
@@ -59,9 +57,8 @@ mod tests {
     }
     #[test]
     fn qcsk_signal() {
-        let mut rng = rand::thread_rng();
         let num_bits = 9002;
-        let data_bits: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+        let data_bits: Vec<Bit> = random_bits(num_bits);
 
         let qcsk_tx: Vec<Complex<f64>> = tx_qcsk_signal(data_bits.iter().cloned()).collect();
         let qcsk_rx: Vec<Bit> = rx_qcsk_signal(qcsk_tx.iter().cloned()).collect();

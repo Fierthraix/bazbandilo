@@ -57,16 +57,13 @@ pub fn rx_mpsk_signal<I: Iterator<Item = Complex<f64>>>(
 mod tests {
     use super::*;
     extern crate itertools;
-    extern crate rand;
-    extern crate rand_distr;
-    use crate::Rng;
+    use crate::random_bits;
     use rstest::rstest;
 
     #[test]
     fn bpsk() {
-        let mut rng = rand::thread_rng();
         let num_bits = 9001;
-        let data_bits: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+        let data_bits: Vec<Bit> = random_bits(num_bits);
 
         let bpsk_tx: Vec<Complex<f64>> = tx_bpsk_signal(data_bits.iter().cloned()).collect();
         let bpsk_rx: Vec<Bit> = rx_bpsk_signal(bpsk_tx.iter().cloned()).collect();
@@ -75,9 +72,8 @@ mod tests {
 
     #[test]
     fn qpsk() {
-        let mut rng = rand::thread_rng();
         let num_bits = 9002;
-        let data_bits: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+        let data_bits: Vec<Bit> = random_bits(num_bits);
 
         let qpsk_tx: Vec<Complex<f64>> = tx_qpsk_signal(data_bits.iter().cloned()).collect();
 
@@ -94,9 +90,8 @@ mod tests {
     #[case(1024)]
     #[case(4096)]
     fn test_mpsk_works(#[case] m: usize) {
-        let mut rng = rand::thread_rng();
         let num_bits = 10 * (m as f64).log2() as usize;
-        let data_bits: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+        let data_bits: Vec<Bit> = random_bits(num_bits);
 
         let mpsk_tx: Vec<Complex<f64>> = tx_mpsk_signal(data_bits.iter().cloned(), m).collect();
         let mpsk_rx: Vec<Bit> = rx_mpsk_signal(mpsk_tx.iter().cloned(), m).collect();

@@ -13,19 +13,16 @@ macro_rules! c {
 
 macro_rules! energy_samples_bits {
     ($tx_fn:expr, $min_samples:expr) => {{
-        let mut rng = rand::thread_rng();
-
         let mut num_bits: usize = $min_samples;
 
         // Create transmit signal.
-        let mut tx_signal: Vec<Complex<f64>> =
-            $tx_fn((0..num_bits).map(|_| rng.gen::<Bit>())).collect();
+        let mut tx_signal: Vec<Complex<f64>> = $tx_fn(random_bits(num_bits).into_iter()).collect();
 
         while tx_signal.len() < $min_samples {
             let ratio: usize = (num_bits as f64 / tx_signal.len() as f64).ceil() as usize;
             let new_bits: usize = (ratio - 1) * num_bits;
             num_bits += new_bits;
-            tx_signal.extend($tx_fn((0..new_bits).map(|_| rng.gen::<Bit>())));
+            tx_signal.extend($tx_fn(random_bits(num_bits).into_iter()));
         }
         let energy_signal: f64 = tx_signal.iter().map(|&s_i| s_i.norm_sqr()).sum();
 

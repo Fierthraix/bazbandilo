@@ -63,15 +63,12 @@ pub fn rx_mfsk_signal<I: Iterator<Item = Complex<f64>>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    extern crate rand;
-    extern crate rand_distr;
-    use crate::Rng;
+    use crate::random_bits;
 
     #[test]
     fn bfsk() {
-        let mut rng = rand::thread_rng();
         let num_bits = 9001;
-        let data_bits: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+        let data_bits: Vec<Bit> = random_bits(num_bits);
 
         let samples_per_symbol = 1000;
 

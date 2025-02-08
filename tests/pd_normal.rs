@@ -14,13 +14,12 @@ use bazbandilo::{
     ofdm::tx_ofdm_signal,
     psk::{tx_bpsk_signal, tx_qpsk_signal},
     qam::tx_qam_signal,
-    Bit,
+    random_bits,
 };
 
 use kdam::{par_tqdm, BarExt};
 use num::Zero;
 use num_complex::Complex;
-use rand::Rng;
 use rayon::prelude::*;
 
 #[macro_use]

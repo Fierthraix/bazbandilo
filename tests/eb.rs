@@ -1,12 +1,12 @@
 #![allow(non_upper_case_globals)]
-use bazbandilo::psk::{tx_bpsk_signal, tx_qpsk_signal};
-// use bazbandilo::cdma::{tx_cdma_bpsk_signal, tx_cdma_qpsk_signal};
-use bazbandilo::fsk::tx_bfsk_signal;
-// use bazbandilo::hadamard::HadamardMatrix;
-use bazbandilo::{avg_energy, Bit};
+use bazbandilo::{
+    avg_energy,
+    fsk::tx_bfsk_signal,
+    psk::{tx_bpsk_signal, tx_qpsk_signal},
+    random_bits, Bit,
+};
 
 use num::complex::Complex;
-use rand::Rng;
 
 #[macro_use]
 mod util;
@@ -22,8 +22,7 @@ macro_rules! check_eb {
 #[ignore] // TODO: FIXME:!
 fn check_ebs() {
     let num_bits: usize = 9002;
-    let mut rng = rand::thread_rng();
-    let data: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect(); // Make new random data.
+    let data: Vec<Bit> = random_bits(num_bits);
 
     let bpsk_tx = tx_bpsk_signal(data.iter().cloned()); //.scale(48f64.sqrt().powi(-1));
     let bpsk_eb = check_eb!(num_bits, bpsk_tx);

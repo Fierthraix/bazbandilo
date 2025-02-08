@@ -32,8 +32,7 @@ pub fn rx_qam_signal<I: Iterator<Item = Complex<f64>>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    extern crate rand;
-    use crate::Rng;
+    use crate::random_bits;
     use rstest::rstest;
 
     #[rstest]
@@ -44,9 +43,8 @@ mod tests {
     #[case(1024)]
     #[case(4096)]
     fn test_qam_works(#[case] m: usize) {
-        let mut rng = rand::thread_rng();
         let num_bits = 10 * (m as f64).log2() as usize;
-        let data_bits: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+        let data_bits: Vec<Bit> = random_bits(num_bits);
 
         let qam_tx: Vec<Complex<f64>> = tx_qam_signal(data_bits.iter().cloned(), m).collect();
         let qam_rx: Vec<Bit> = rx_qam_signal(qam_tx.iter().cloned(), m).collect();

@@ -1,15 +1,14 @@
 use std::ffi::CString;
 
-use bazbandilo::cdma::tx_cdma_bpsk_signal;
-use bazbandilo::hadamard::HadamardMatrix;
-use bazbandilo::psk::tx_bpsk_signal;
-use bazbandilo::{avg_energy, awgn, linspace, Bit};
+use bazbandilo::{
+    avg_energy, awgn, cdma::tx_cdma_bpsk_signal, hadamard::HadamardMatrix, linspace,
+    psk::tx_bpsk_signal, random_bits, Bit,
+};
 
 use num::complex::Complex;
 use num::Zero;
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
-use rand::Rng;
 
 #[macro_use]
 mod util;
@@ -18,8 +17,7 @@ mod util;
 #[ignore]
 fn p_values() -> PyResult<()> {
     let num_bits = 10_000;
-    let mut rng = rand::thread_rng();
-    let data: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+    let data: Vec<Bit> = random_bits(num_bits);
 
     let matrix_size = 16;
     let walsh_codes = HadamardMatrix::new(matrix_size);

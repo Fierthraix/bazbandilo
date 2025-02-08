@@ -5,14 +5,13 @@ use std::sync::Mutex;
 use kdam::{par_tqdm, BarExt};
 use num::Zero;
 use num_complex::Complex;
-use rand::Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[macro_use]
 mod util;
 
-use bazbandilo::{awgn, linspace, psk::tx_bpsk_signal, undb, Bit};
+use bazbandilo::{awgn, linspace, psk::tx_bpsk_signal, random_bits, undb};
 
 /// The output of a detector on many snrs.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -89,10 +88,8 @@ macro_rules! DetectorTest {
                         let h1_λs: Vec<f64> = (0..NUM_ATTEMPTS)
                             .into_par_iter()
                             .map(|_| {
-                                let mut rng = rand::thread_rng();
-                                let data = (0..num_bits).map(|_| rng.gen::<Bit>());
-
-                                energy_detect(awgn($tx_fn(data), n0))
+                                let data = random_bits(num_bits);
+                                energy_detect(awgn($tx_fn(data.into_iter()), n0))
                             })
                             .collect();
 

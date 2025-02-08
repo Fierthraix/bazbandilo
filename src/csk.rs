@@ -26,14 +26,12 @@ pub fn rx_csk_signal<I: Iterator<Item = Complex<f64>>>(message: I) -> impl Itera
 mod tests {
 
     use super::*;
-    extern crate rand;
-    use crate::Rng;
+    use crate::random_bits;
 
     #[test]
     fn csk() {
-        let mut rng = rand::thread_rng();
         let num_bits = 9001;
-        let data_bits: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+        let data_bits: Vec<Bit> = random_bits(num_bits);
 
         let csk_tx: Vec<Complex<f64>> = tx_csk_signal(data_bits.iter().cloned()).collect();
         let csk_rx: Vec<Bit> = rx_csk_signal(csk_tx.iter().cloned()).collect();

@@ -10,7 +10,6 @@ use kdam::{par_tqdm, BarExt};
 use num_complex::Complex;
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
-use rand::Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -30,13 +29,8 @@ use bazbandilo::{
     ofdm::{rx_ofdm_signal, tx_ofdm_signal},
     psk::{rx_bpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_qpsk_signal},
     qam::{rx_qam_signal, tx_qam_signal},
-    undb, Bit,
+    random_bits, undb,
 };
-
-fn random_data(num_bits: usize) -> Vec<Bit> {
-    let mut rng = rand::thread_rng();
-    (0..num_bits).map(|_| rng.gen::<Bit>()).collect()
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 struct BitErrorResults {
@@ -101,7 +95,7 @@ macro_rules! BitErrorTest {
                         errors += (0..parallel)
                             .into_par_iter()
                             .map(|_| {
-                                let data = random_data(NUM_BITS);
+                                let data = random_bits(NUM_BITS);
                                 let tx_signal = $tx_fn(data.iter().cloned());
                                 let rx_signal = $rx_fn(awgn(tx_signal, n0));
 

@@ -1,8 +1,11 @@
 use crate::{chaos::LogisticMap, fftshift, iter::Iter, no_nans, psk::tx_bpsk_signal, Bit};
+
+use std::iter;
+
 use rand::prelude::*;
+use rand::rngs::StdRng;
 use rustfft::num_traits::Zero;
 use rustfft::{num_complex::Complex, FftPlanner};
-use std::iter;
 
 const NUM_SUBCARRIERS: usize = 64;
 const CP_LEN: usize = NUM_SUBCARRIERS / 4;
@@ -115,15 +118,12 @@ pub fn rx_fh_ofdm_dcsk_signal<I: Iterator<Item = Complex<f64>>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    extern crate rand;
-    use crate::fh_ofdm_dcsk::tests::rand::Rng;
+    use crate::random_bits;
 
     #[test]
-    // #[ignore] // TODO: FIXME: this test.
     fn baseband() {
-        let mut rng = rand::thread_rng();
         let num_bits = 9002;
-        let data_bits: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+        let data_bits: Vec<Bit> = random_bits(num_bits);
 
         let fh_ofdm_dcsk_tx: Vec<Complex<f64>> =
             tx_fh_ofdm_dcsk_signal(data_bits.iter().cloned()).collect();

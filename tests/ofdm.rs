@@ -1,11 +1,12 @@
 use std::ffi::CString;
 
-use bazbandilo::ofdm::{rx_ofdm_signal, tx_ofdm_signal};
-use bazbandilo::psk::{rx_qpsk_signal, tx_qpsk_signal};
-use bazbandilo::Bit;
+use bazbandilo::{
+    ofdm::{rx_ofdm_signal, tx_ofdm_signal},
+    psk::{rx_qpsk_signal, tx_qpsk_signal},
+    random_bits, Bit,
+};
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
-use rand::Rng;
 use rustfft::num_complex::{Complex, ComplexFloat};
 
 #[macro_use]
@@ -16,8 +17,7 @@ mod util;
 fn py_version() -> PyResult<()> {
     let num_bits = 2080;
 
-    let mut rng = rand::thread_rng();
-    let data: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+    let data: Vec<Bit> = random_bits(num_bits);
 
     let scs = 64;
     let pilots = 12;

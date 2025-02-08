@@ -42,7 +42,7 @@ pub fn bch_stream_decode<I: Iterator<Item = Bit>>(data: I) -> impl Iterator<Item
 #[cfg(test)]
 mod test {
     use super::*;
-    use rand::Rng;
+    use crate::random_bits;
 
     #[test]
     fn will_the_real_reed_solomon() {
@@ -79,10 +79,9 @@ mod test {
 
     #[test]
     fn stream_bch_works() {
-        let mut rng = rand::thread_rng();
         let num_bits = 100; //1_000_000; // Ensure there will be padding.
 
-        let data: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+        let data: Vec<Bit> = random_bits(num_bits);
 
         let encoded: Vec<Bit> = bch_stream_encode(data.iter().cloned()).collect();
 

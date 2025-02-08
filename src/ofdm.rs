@@ -101,20 +101,17 @@ pub fn rx_ofdm_signal<I: Iterator<Item = Complex<f64>>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    extern crate rand;
-    extern crate rand_distr;
-    use crate::ofdm::tests::rand::Rng;
-    use crate::psk::{rx_qpsk_signal, tx_qpsk_signal};
-    use crate::Bit;
-
+    use crate::{
+        psk::{rx_qpsk_signal, tx_qpsk_signal},
+        random_bits, Bit,
+    };
     #[test]
     fn test_qpsk_ofdm() {
         let subcarriers = 64;
         let pilots = 12;
         // let pilots = 0;
-        let mut rng = rand::thread_rng();
         let num_bits = 103; // 64 - 12; //2080;
-        let data_bits: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+        let data_bits: Vec<Bit> = random_bits(num_bits);
 
         let tx_sig: Vec<Complex<f64>> = tx_ofdm_signal(
             tx_qpsk_signal(data_bits.iter().cloned()),

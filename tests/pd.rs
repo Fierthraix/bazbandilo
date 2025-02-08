@@ -1,5 +1,7 @@
 use std::ffi::CString;
 
+use bazbandilo::{linspace, ssca::ssca_mapped, undb};
+
 use lazy_static::lazy_static;
 use ndarray::s;
 use num_complex::Complex;
@@ -7,8 +9,6 @@ use numpy::ndarray::{Array2, Axis};
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
 use serde::{Deserialize, Serialize};
-
-use bazbandilo::{linspace, ssca::ssca_mapped, undb};
 
 pub const NUM_SAMPLES: usize = 65536;
 
@@ -264,10 +264,9 @@ macro_rules! DetectorTest {
                         let h1_λs: Vec<Vec<DetectorOutput>> = (0..NUM_ATTEMPTS)
                             .into_par_iter()
                             .map(|_| {
-                                let mut rng = rand::thread_rng();
-                                let data = (0..num_bits).map(|_| rng.gen::<Bit>());
+                                let data = random_bits(num_bits);
 
-                                run_detectors(awgn($tx_fn(data), n0))
+                                run_detectors(awgn($tx_fn(data.into_iter()), n0))
                             })
                             .collect();
 

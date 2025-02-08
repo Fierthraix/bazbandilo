@@ -1,16 +1,18 @@
 use std::ffi::CString;
 
-use bazbandilo::cdma::{rx_cdma_bpsk_signal, tx_cdma_bpsk_signal};
-use bazbandilo::hadamard::HadamardMatrix;
-use bazbandilo::iter::Iter;
-use bazbandilo::psk::tx_bpsk_signal;
-use bazbandilo::{awgn, bit_to_nrz, Bit};
+use bazbandilo::{
+    awgn, bit_to_nrz,
+    cdma::{rx_cdma_bpsk_signal, tx_cdma_bpsk_signal},
+    hadamard::HadamardMatrix,
+    iter::Iter,
+    psk::tx_bpsk_signal,
+    random_bits, Bit,
+};
 
 use num::complex::Complex;
 use num::Zero;
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
-use rand::Rng;
 use rayon::prelude::*;
 
 #[macro_use]
@@ -140,11 +142,8 @@ fn mai_plot() {
     let num_bits = 1000; // How many bits to transmit overall.
     let num_samples = num_bits * keysize;
 
-    let mut rng = rand::thread_rng();
     // The data each user will transmit.
-    let datas: Vec<Vec<Bit>> = (0..num_users)
-        .map(|_| (0..num_bits).map(|_| rng.gen::<Bit>()).collect())
-        .collect();
+    let datas: Vec<Vec<Bit>> = (0..num_users).map(|_| random_bits(num_bits)).collect();
 
     // The keys each user will use.
     let walsh_codes = HadamardMatrix::new(keysize);

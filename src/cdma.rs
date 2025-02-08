@@ -1,5 +1,8 @@
-use crate::psk::{rx_bpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_qpsk_signal};
-use crate::{iter::Iter, Bit};
+use crate::{
+    iter::Iter,
+    psk::{rx_bpsk_signal, rx_qpsk_signal, tx_bpsk_signal, tx_qpsk_signal},
+    Bit,
+};
 
 use num_complex::Complex;
 
@@ -76,10 +79,8 @@ pub fn rx_cdma_qpsk_signal<'a, I: Iterator<Item = Complex<f64>> + 'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    extern crate rand;
-    extern crate rand_distr;
-    use crate::cdma::tests::rand::Rng;
     use crate::hadamard::HadamardMatrix;
+    use crate::random_bits;
     use rstest::rstest;
 
     #[rstest]
@@ -95,8 +96,7 @@ mod tests {
         let key: Vec<Bit> = walsh_codes.key(0).clone();
 
         // Data bits.
-        let mut rng = rand::thread_rng();
-        let data_bits: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+        let data_bits: Vec<Bit> = random_bits(num_bits);
 
         // TX CDMA.
         let cdma_tx: Vec<Bit> = tx_cdma(data_bits.clone().into_iter(), &key).collect();
@@ -119,8 +119,7 @@ mod tests {
         let key: Vec<Bit> = walsh_codes.key(0).clone();
 
         // Data bits.
-        let mut rng = rand::thread_rng();
-        let data_bits: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+        let data_bits: Vec<Bit> = random_bits(num_bits);
 
         // TX CDMA.
         let cdma_tx: Vec<Complex<f64>> =

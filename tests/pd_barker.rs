@@ -2,12 +2,11 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::sync::Mutex;
 
-use bazbandilo::{awgn, barker::get_barker_code, cdma::tx_cdma_bpsk_signal, Bit};
+use bazbandilo::{awgn, barker::get_barker_code, cdma::tx_cdma_bpsk_signal, random_bits};
 
 use kdam::{par_tqdm, BarExt};
 use num::Zero;
 use num_complex::Complex;
-use rand::Rng;
 use rayon::prelude::*;
 
 #[macro_use]

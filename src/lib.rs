@@ -224,16 +224,8 @@ pub fn awgn<I: Iterator<Item = Complex<f64>>>(
     sigma: f64,
 ) -> impl Iterator<Item = Complex<f64>> {
     signal
-        .zip(
-            Normal::new(0f64, sigma)
-                .unwrap()
-                .sample_iter(rand::thread_rng()),
-        )
-        .zip(
-            Normal::new(0f64, sigma)
-                .unwrap()
-                .sample_iter(rand::thread_rng()),
-        )
+        .zip(Normal::new(0f64, sigma).unwrap().sample_iter(rand::rng()))
+        .zip(Normal::new(0f64, sigma).unwrap().sample_iter(rand::rng()))
         .map(|((sample, n_1), n_2)| sample + Complex::new(n_1, n_2))
 }
 
@@ -269,7 +261,6 @@ pub fn avg_energy(signal: &[Complex<f64>]) -> f64 {
 mod tests {
 
     use super::*;
-    use rand::Rng;
 
     #[test]
     fn it_works() {
@@ -283,9 +274,8 @@ mod tests {
 
     #[test]
     fn bitstream_conversions() {
-        let mut rng = rand::thread_rng();
         let num_bits = 33; // Ensure there will be padding.
-        let start_data: Vec<Bit> = (0..num_bits).map(|_| rng.gen::<Bit>()).collect();
+        let start_data: Vec<Bit> = random_bits(num_bits);
 
         let u8s: Vec<u8> = bools_to_u8s(start_data.iter().cloned()).collect();
         assert_eq!(u8s.len(), 40 / 8); // Check for padding as well...
@@ -390,10 +380,14 @@ pub fn fam_py(
     }
 }
 
+pub fn random_bits(num_bits: usize) -> Vec<Bit> {
+    let mut rng = rand::rng();
+    (0..num_bits).map(|_| rng.random::<Bit>()).collect()
+}
+
 #[pyfunction]
 pub fn random_data(py: Python<'_>, num_bits: usize) -> Bound<'_, PyArray1<Bit>> {
-    let mut rng = rand::thread_rng();
-    PyArray1::from_iter(py, (0..num_bits).map(|_| rng.gen::<Bit>()))
+    PyArray1::from_vec(py, random_bits(num_bits))
 }
 
 #[pyfunction]
@@ -406,16 +400,8 @@ fn energy_detector(signal: Vec<Complex<f64>>) -> f64 {
 pub fn awgn_py(signal: Vec<Complex<f64>>, sigma: f64) -> Vec<Complex<f64>> {
     signal
         .into_iter()
-        .zip(
-            Normal::new(0f64, sigma)
-                .unwrap()
-                .sample_iter(rand::thread_rng()),
-        )
-        .zip(
-            Normal::new(0f64, sigma)
-                .unwrap()
-                .sample_iter(rand::thread_rng()),
-        )
+        .zip(Normal::new(0f64, sigma).unwrap().sample_iter(rand::rng()))
+        .zip(Normal::new(0f64, sigma).unwrap().sample_iter(rand::rng()))
         .map(|((sample, n_1), n_2)| sample + Complex::new(n_1, n_2))
         .collect()
 }
@@ -427,12 +413,12 @@ fn awgn2(signal: Vec<Complex<f64>>, sigma: f64) -> Vec<Complex<f64>> {
         .zip(
             Normal::new(0f64, sigma / 2f64)
                 .unwrap()
-                .sample_iter(rand::thread_rng()),
+                .sample_iter(rand::rng()),
         )
         .zip(
             Normal::new(0f64, sigma / 2f64)
                 .unwrap()
-                .sample_iter(rand::thread_rng()),
+                .sample_iter(rand::rng()),
         )
         .map(|((sample, n_1), n_2)| sample + Complex::new(n_1, n_2))
         .collect()
@@ -442,11 +428,11 @@ fn awgn2(signal: Vec<Complex<f64>>, sigma: f64) -> Vec<Complex<f64>> {
 fn pure_awgn(size: usize, sigma: f64) -> Vec<Complex<f64>> {
     Normal::new(0f64, sigma / 2f64)
         .unwrap()
-        .sample_iter(rand::thread_rng())
+        .sample_iter(rand::rng())
         .zip(
             Normal::new(0f64, sigma / 2f64)
                 .unwrap()
-                .sample_iter(rand::thread_rng()),
+                .sample_iter(rand::rng()),
         )
         .map(|(n_1, n_2)| Complex::new(n_1, n_2))
         .take(size)
