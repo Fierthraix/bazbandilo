@@ -2,13 +2,12 @@
 from cfar import parse_results
 from plot import (
     DETECTORS,
-    FIG_SIZE,
     base_parser,
-    get_cycles,
     load_json,
+    plot_pd_vs_snr_cfar,
     multi_parse,
 )
-from util import db, timeit
+from util import timeit
 
 from argparse import Namespace
 from functools import partial
@@ -17,37 +16,12 @@ import re
 from typing import Dict, List
 
 
-def plot_pd_vs_snr_cfar(
-    modulation: Dict[str, object],
-    kind: str,
-    save=False,
-    save_dir=Path("/tmp/"),
-):
-    """Plot $P_D$ versus SNR for multiple $P_{FA}$s."""
-    fig, ax = plt.subplots()
-    ax.grid(True, which="both")
-    ax.set_xlabel("SNR (db)")
-    ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)")
-    ax.set_prop_cycle(get_cycles(len(modulation[kind]["pfas"])))
-    snrs_db = db(modulation["snrs"])
-    ax.set_xlim(snrs_db.min(), snrs_db.max())
-    ax.set_ylim([0, 1.025])
-    for pfa, pds in modulation[kind]["pfas"].items():
-        ax.plot(snrs_db, pds, label=f"$P_{{FA}}={pfa}$")
-    ax.legend(loc="best")
-    if save:
-        fig.set_size_inches(*FIG_SIZE)
-        fig.savefig(
-            save_dir / f'cfar_pd_vs_snr_{kind}_{modulation["name"]}.png',
-            bbox_inches="tight",
-        )
-    ax.set_title(f"{modulation["name"]} - {kind}")
-
-
 def parse_args() -> Namespace:
     ap = base_parser()
     ap.add_argument("-r", "--regex", default="", type=str)
-    ap.add_argument("-f", "--pfa", default=[0.25, 0.15, 0.1, 0.05, 0.01], type=float, nargs="+")
+    ap.add_argument(
+        "-f", "--pfa", default=[0.25, 0.15, 0.1, 0.05, 0.01], type=float, nargs="+"
+    )
     ap.add_argument("--ebn0", action="store_true")
     return ap.parse_args()
 
@@ -69,7 +43,7 @@ if __name__ == "__main__":
         gc.collect()
 
     # Parse and Log Regress results.
-    with timeit("Logistic Regresstion") as _:
+    with timeit("CFAR Analysis") as _:
         parse_fn = partial(parse_results, pfas=args.pfa)
         regressed: List[Dict[str, object]] = multi_parse(results, parse_fn)
         del results
@@ -83,7 +57,10 @@ if __name__ == "__main__":
         for modulation in regressed:
             for detector in DETECTORS:
                 plot_pd_vs_snr_cfar(
-                    modulation, detector, save=args.save, save_dir=args.save_dir
+                    modulation,
+                    detector,
+                    save_path=args.save_dir
+                    / f'cfar_pd_vs_snr_{detector}_{modulation["name"]}.png',
                 )
 
     if not args.save:

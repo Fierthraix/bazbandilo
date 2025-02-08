@@ -58,7 +58,7 @@ if __name__ == "__main__":
         gc.collect()
 
     # Parse and Log Regress results.
-    with timeit("CFAR Analysis.") as _:
+    with timeit("CFAR Analysis") as _:
         parse_fn = partial(parse_results, pfas=args.pfa)
         grouped_regress: List[List[Dict[str, object]]] = multi_parse_grouped(
             grouped_results, parse_fn
