@@ -322,9 +322,13 @@ def filter_results(
 
 def get_num_workers() -> int:
     ram_available: int = psutil.virtual_memory().available
+    swap_available: int = psutil.swap_memory().free
+    memory_available = ram_available + swap_available
+
     ram_used: int = psutil.Process(os.getpid()).memory_info().rss
     num_cpus: int = os.cpu_count()
-    return min(ram_available // ram_used, num_cpus)
+
+    return min(memory_available // ram_used, num_cpus)
 
 
 def multi_parse(
