@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import psutil
 import re
+from tqdm import tqdm
 from typing import Callable, Dict, List, Optional, Tuple
 
 # FIG_SIZE = (16, 9)
@@ -338,12 +339,11 @@ def multi_parse(
 ) -> List[Dict[str, object]]:
 
     num_workers: int = get_num_workers()
-
     if num_workers > 1:
         with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as p:
-            return list(p.map(parse_fn, results))
+            return list(tqdm(p.map(parse_fn, results), total=len(results)))
     else:
-        return list(map(parse_fn, results))
+        return list(tqdm(map(parse_fn, results), total=len(results)))
 
 
 def multi_parse_grouped(
@@ -352,12 +352,17 @@ def multi_parse_grouped(
 ) -> List[List[Dict[str, object]]]:
 
     num_workers: int = get_num_workers()
-
     if num_workers > 1:
         with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as p:
-            return [list(p.map(parse_fn, results_group)) for results_group in results]
+            return [
+                list(tqdm(p.map(parse_fn, results_group), total=len(results_group)))
+                for results_group in results
+            ]
     else:
-        return [list(map(parse_fn, results_group)) for results_group in results]
+        return [
+            list(tqdm(map(parse_fn, results_group), total=len(results_group)))
+            for results_group in results
+        ]
 
 
 def base_parser() -> ArgumentParser:
