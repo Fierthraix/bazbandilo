@@ -1,17 +1,34 @@
 #!/usr/bin/env python3
+from cfar import calculate_pd, get_threshold
+from plot import save_figure
+
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
+from pathlib import Path
 from scipy.stats import rv_histogram
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
 from sklearn import metrics
+
+
+def calc_tpr_fpr(pfa: float, h0_samps: np.ndarray, h1_samps: np.ndarray):
+    low_end = min(h0_samps.min(), h1_samps.min())
+    high_end = max(h0_samps.max(), h1_samps.max())
+
+    lambdas = np.linspace(low_end, high_end, 500)
+
+    tpr = [np.mean([λ > λ0 for λ in h1_samps]) for λ0 in lambdas]
+    fpr = [np.mean([λ > λ0 for λ in h0_samps]) for λ0 in lambdas]
+
+    return tpr, fpr
 
 
 if __name__ == "__main__":
     binification = 128
     # Get Points
     num_iters: int = 9001
+
+    GRAPHS_DIR = Path(__file__).parent.parent / "final" / "graphs"
+
+    SAVE: bool = False
 
     # These values represent the output statistic
     # of the detector in the H0 and H1 scenarios.
@@ -32,66 +49,50 @@ if __name__ == "__main__":
     h0_pdf = h0.pdf(x)
     h1_pdf = h1.pdf(x)
 
-    x_var = np.concatenate((h0_samps, h1_samps)).reshape(-1, 1)
-    y_var = np.concatenate((np.zeros(len(h0_samps)), np.ones(len(h1_samps))))
-    x_train, x_test, y_train, y_test = train_test_split(
-        x_var, y_var, test_size=0.5, random_state=0
-    )
+    cfar_pfa = 0.1
+    cfar_threshold = get_threshold(cfar_pfa, h0_samps)
+    cfar_tpr = calculate_pd(cfar_pfa, h0_samps, h1_samps)
 
-    log_regression = LogisticRegression()
-
-    log_regression.fit(x_train, y_train)
-
-    y_pred_proba = log_regression.predict_proba(x_test)[::, 1]
-    fpr, tpr, thresholds = metrics.roc_curve(
-        y_test, y_pred_proba, drop_intermediate=False
-    )
-    auc = metrics.roc_auc_score(y_test, y_pred_proba)
-
-    df = pd.DataFrame(
-        {
-            "x": np.concatenate((h0_samps, h1_samps)),
-            "y": np.concatenate((np.zeros(len(h0_samps)), np.ones(len(h1_samps)))),
-        }
-    )
-
-    df_test = pd.DataFrame(
-        {
-            "x": x_test.flatten(),
-            "y": y_test,
-            "proba": y_pred_proba,
-        }
-    )
-
-    # sort it by predicted probabilities
-    # because thresholds[1:] = y_proba[::-1]
-    df_test.sort_values(by="proba", inplace=True)
-    # add reversed TPR and FPR
-    df_test["tpr"] = tpr[1:][::-1]
-    df_test["fpr"] = fpr[1:][::-1]
-    # add thresholds to check
-    df_test["thresholds"] = thresholds[1:][::-1]
-    # add Youden's j index
-    df_test["youden_j"] = df_test.tpr - df_test.fpr
-
-    cut_off = df_test.sort_values(
-        by="youden_j", ascending=False, ignore_index=True
-    ).iloc[0]
-
+    # Plot the PDFs of the H0 and H1 cases.
     fig, ax = plt.subplots()
+    ax.set_ylabel(r"$\mathbb{P}(\lambda)$")
+    ax.set_xlabel(r"Detector Output $\lambda$")
     ax.plot(x, h0_pdf)
     ax.plot(x, h1_pdf)
-    ax.axvline(cut_off.x, color="k", ls="--")
+    # ax.axvline(cut_off.x, color="k", ls="--")
+    ax.axvline(
+        cfar_threshold,
+        color="k",
+        ls="--",
+        label=r"Threshold for $\mathbb{P}_{FA}=" f"{cfar_pfa}$",
+    )
+    ax.legend(loc="best")
+    if SAVE:
+        save_figure(fig, GRAPHS_DIR / "pd:example.png", fig_size=(8, 4.5))
 
+    tpr, fpr = calc_tpr_fpr(cfar_pfa, h0_samps, h1_samps)
+    auc = metrics.auc(fpr, tpr)
+
+    # Plot the ROC curve.
     fig, ax = plt.subplots()
-    metrics.RocCurveDisplay(fpr=df_test.fpr, tpr=df_test.tpr, roc_auc=auc).plot(ax=ax)
-    ax.set_title("ROC Curve")
+    metrics.RocCurveDisplay(fpr=fpr, tpr=tpr, roc_auc=auc).plot(ax=ax)
     ax.axline(xy1=(0, 0), slope=1, color="r", ls=":")
+    ax.axvline(cfar_pfa, color="k", ls="--")
     ax.plot(
-        cut_off.fpr, cut_off.tpr, "ko", ms=10, label=f"Best Threshold = {cut_off.x:.2f}"
+        cfar_pfa,
+        cfar_tpr,
+        "ko",
+        ms=10,
+        label=r"Threshold $\lambda_0="
+        f"{cfar_threshold:.1f}$ "
+        r"($\mathbb{P}_{FA}="
+        f"{cfar_pfa}$)",
     )
     ax.set_ylabel("True Positive Rate")
     ax.set_xlabel("False Positive Rate")
     ax.legend(loc=4)
+    if SAVE:
+        save_figure(fig, GRAPHS_DIR / "roc:example.png")
+    ax.set_title("ROC Curve")
 
     plt.show()
