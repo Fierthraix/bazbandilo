@@ -111,7 +111,7 @@ if __name__ == "__main__":
                             for mod in regressed
                         ],
                         save_path=args.save_dir
-                        / f"covert_metric_{detector}_pfa_{pfa}.png",
+                        / f"covert_metric_{detector}_group_{group_id}_pfa_{pfa}.png",
                         cycles=GROUP_MARKERS[group_id],
                     )
 

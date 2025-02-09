@@ -305,12 +305,16 @@ def plot_λ_vs_snr(
     ax.set_title(f"Threshold vs SNR ({save_path.stem})")
 
 
-def save_figure(fig: plt.Figure, save_path: Optional[Path]):
+def save_figure(
+    fig: plt.Figure,
+    save_path: Optional[Path] = None,
+    fig_size: Tuple[float, float] = FIG_SIZE,
+):
     if not save_path:
         return
     if not save_path.parent.exists():
         save_path.parent.mkdir(parents=True)
-    fig.set_size_inches(*FIG_SIZE)
+    fig.set_size_inches(*fig_size)
     fig.savefig(save_path, bbox_inches="tight")
 
 
@@ -320,10 +324,13 @@ def filter_results(
     return list(filter(lambda mod: pattern.match(mod["name"]), results_object))
 
 
-def get_num_workers() -> int:
+def get_num_workers(use_swap: bool = False) -> int:
     ram_available: int = psutil.virtual_memory().available
-    swap_available: int = psutil.swap_memory().free
-    memory_available = ram_available + swap_available
+    if use_swap:
+        swap_available: int = psutil.swap_memory().free
+        memory_available = ram_available + swap_available
+    else:
+        memory_available = ram_available
 
     ram_used: int = psutil.Process(os.getpid()).memory_info().rss
     num_cpus: int = os.cpu_count()

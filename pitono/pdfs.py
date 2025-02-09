@@ -155,13 +155,13 @@ if __name__ == "__main__":
     with timeit("Plotting") as _:
         for pfa in args.pfa:
             for modulation in regressed:
-                plot_some_pdfs(
-                    modulation,
-                    pfa=pfa,
-                    n=args.num_plots,
-                    save_path=args.save_dir
-                    / f"pdfs_energy_some_snrs_{modulation["name"]}_pfa_{pfa}.png",
-                )
+                # plot_some_pdfs(
+                #     modulation,
+                #     pfa=pfa,
+                #     n=args.num_plots,
+                #     save_path=args.save_dir
+                #     / f"pdfs_energy_some_snrs_{modulation["name"]}_pfa_{pfa}.png",
+                # )
                 plot_specific_snrs(
                     modulation,
                     snrs=undb(np.array([6, -6, -18, -30])),
