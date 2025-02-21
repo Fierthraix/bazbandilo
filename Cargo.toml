@@ -3,7 +3,7 @@ name = "bazbandilo"
 description = "A chaotic communications simulator."
 version = "1.0.0"
 license = "GPL-3.0-or-later"
-edition = "2021"
+edition = "2024"
 homepage = "https://github.com/Fierthraix/bazbandilo"
 repository = "https://github.com/Fierthraix/bazbandilo.git"
 
