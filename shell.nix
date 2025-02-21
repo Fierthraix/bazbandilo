@@ -3,7 +3,7 @@
 pkgs.mkShell {
   buildInputs = with pkgs; [
     just
-    poetry
+    uv
     maturin
     rustc
     cargo

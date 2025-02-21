@@ -17,29 +17,24 @@ ber:
 
 [no-cd]
 cfar *args:
-	poetry run python3 -i {{ python_dir + "cfar.py" }} {{ args }}
+	uv run python3 -i {{ python_dir + "cfar.py" }} {{ args }}
 
 clean:
 	-rm "{{ ffi_dir }}"/*.so
 
 make:
-	poetry run maturin develop
-
-install:
-	poetry install
-	cargo install maturin
-	@just make
+	uv run maturin develop
 
 [no-cd]
 interactive *kargs:
-	poetry run python3 -i {{ kargs }}
+	uv run python3 -i {{ kargs }}
 
 jupyter:
-	poetry run jupyter lab
+	uv run jupyter lab
 
 [no-cd]
 shell *kargs:
-	poetry run python3 {{ kargs }}
+	uv run python3 {{ kargs }}
 
 test arg:
 	cargo test --test {{ arg }} -- --nocapture
