@@ -55,10 +55,11 @@ if __name__ == "__main__":
 
     # Plot the PDFs of the H0 and H1 cases.
     fig, ax = plt.subplots()
+    ax.grid(True, which="both")
     ax.set_ylabel(r"$\mathbb{P}(\lambda)$")
     ax.set_xlabel(r"Detector Output $\lambda$")
-    ax.plot(x, h0_pdf)
-    ax.plot(x, h1_pdf)
+    ax.plot(x, h0_pdf, label=r"$\mathbb{P}(\lambda|H_0)$")
+    ax.plot(x, h1_pdf, label=r"$\mathbb{P}(\lambda|H_1)$")
     # ax.axvline(cut_off.x, color="k", ls="--")
     ax.axvline(
         cfar_threshold,
@@ -76,8 +77,9 @@ if __name__ == "__main__":
     # Plot the ROC curve.
     fig, ax = plt.subplots()
     metrics.RocCurveDisplay(fpr=fpr, tpr=tpr, roc_auc=auc).plot(ax=ax)
+    ax.grid(True, which="both")
     ax.axline(xy1=(0, 0), slope=1, color="r", ls=":")
-    ax.axvline(cfar_pfa, color="k", ls="--")
+    ax.axvline(cfar_pfa, color="k", ls="--", label=f"$P_{{FA}}={cfar_pfa}$")
     ax.plot(
         cfar_pfa,
         cfar_tpr,
