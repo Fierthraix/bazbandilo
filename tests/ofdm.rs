@@ -1,9 +1,10 @@
 use std::ffi::CString;
 
 use bazbandilo::{
+    Bit,
     ofdm::{rx_ofdm_signal, tx_ofdm_signal},
     psk::{rx_qpsk_signal, tx_qpsk_signal},
-    random_bits, Bit,
+    random_bits,
 };
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
@@ -45,14 +46,18 @@ fn py_version() -> PyResult<()> {
         locals.set_item("tx_sig_rs", tx_sig.clone())?;
 
         let mod_path = py.eval(
-            c!("pathlib.Path.home() / 'projects' / 'comms_py' / 'ofdm_trx5.py'"),
+            &CString::new("pathlib.Path.home() / 'projects' / 'comms_py' / 'ofdm_trx5.py'")
+                .unwrap(),
             None,
             Some(&locals),
         )?;
         locals.set_item("mod_path", mod_path)?;
 
         let comms_py = py.eval(
-            c!("importlib.machinery.SourceFileLoader(mod_path.name, str(mod_path)).load_module()"),
+            &CString::new(
+                "importlib.machinery.SourceFileLoader(mod_path.name, str(mod_path)).load_module()",
+            )
+            .unwrap(),
             None,
             Some(&locals),
         )?;
@@ -61,20 +66,20 @@ fn py_version() -> PyResult<()> {
         locals.set_item("data", data.clone())?;
         let py_tx_sig_re: Vec<f64> = py
             .eval(
-                c!("list(np.array(comms_py.tx_ofdm(data)).real)"),
+                &CString::new("list(np.array(comms_py.tx_ofdm(data)).real)").unwrap(),
                 None,
                 Some(&locals),
             )?
             .extract()?;
         let py_tx_sig_im: Vec<f64> /*&pyo3::PyAny*/ = py.eval(
-            c!("list(np.array(comms_py.tx_ofdm(data)).imag)"),
+            &CString::new("list(np.array(comms_py.tx_ofdm(data)).imag)").unwrap(),
             None,
             Some(&locals),
         )?.extract()?;
 
         let py_rx_dat: Vec<bool> = py
             .eval(
-                c!("list(map(bool, comms_py.rx_ofdm(comms_py.tx_ofdm(data))))"),
+                &CString::new("list(map(bool, comms_py.rx_ofdm(comms_py.tx_ofdm(data))))").unwrap(),
                 None,
                 Some(&locals),
             )?
@@ -82,7 +87,7 @@ fn py_version() -> PyResult<()> {
 
         let py_rx_dat_rs_py: Vec<bool> = py
             .eval(
-                c!("list(map(bool, comms_py.rx_ofdm(tx_sig_rs)))"),
+                &CString::new("list(map(bool, comms_py.rx_ofdm(tx_sig_rs)))").unwrap(),
                 None,
                 Some(&locals),
             )?

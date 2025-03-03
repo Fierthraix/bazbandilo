@@ -1,12 +1,12 @@
 use std::ffi::CString;
 
 use bazbandilo::{
-    avg_energy, awgn, cdma::tx_cdma_bpsk_signal, hadamard::HadamardMatrix, linspace,
-    psk::tx_bpsk_signal, random_bits, Bit,
+    Bit, avg_energy, awgn, cdma::tx_cdma_bpsk_signal, hadamard::HadamardMatrix, linspace,
+    psk::tx_bpsk_signal, random_bits,
 };
 
-use num::complex::Complex;
 use num::Zero;
+use num::complex::Complex;
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
 
@@ -33,7 +33,11 @@ fn p_values() -> PyResult<()> {
         let plt = py.import("matplotlib.pyplot")?;
         let locals =
             [("scipy", scipy), ("matplotlib", matplotlib), ("plt", plt)].into_py_dict(py)?;
-        py.eval(c!("matplotlib.use('agg')"), None, Some(&locals))?;
+        py.eval(
+            &CString::new("matplotlib.use('agg')").unwrap(),
+            None,
+            Some(&locals),
+        )?;
 
         locals.set_item("tx_bpsk", tx_bpsk)?;
         locals.set_item("tx_cdma", tx_cdma)?;
@@ -41,7 +45,8 @@ fn p_values() -> PyResult<()> {
         // Check their p-values !!
         let p_vals: Py<PyAny> = PyModule::from_code(
             py,
-            c!("def p_vals(signal):
+            &CString::new(
+                "def p_vals(signal):
                 from random import gauss
                 import numpy
                 import scipy
@@ -56,9 +61,11 @@ fn p_values() -> PyResult<()> {
                     p_vals.append(res.pvalue)
 
                 return p_vals
-            "),
-            c!(""),
-            c!(""),
+            ",
+            )
+            .unwrap(),
+            &CString::new("").unwrap(),
+            &CString::new("").unwrap(),
         )?
         .getattr("p_vals")?
         .into();
@@ -66,10 +73,18 @@ fn p_values() -> PyResult<()> {
         locals.set_item("p_vals", p_vals)?;
 
         let cdma_p_vals: Vec<f64> = py
-            .eval(c!("p_vals(tx_cdma)"), None, Some(&locals))?
+            .eval(
+                &CString::new("p_vals(tx_cdma)").unwrap(),
+                None,
+                Some(&locals),
+            )?
             .extract()?;
         let bpsk_p_vals: Vec<f64> = py
-            .eval(c!("p_vals(tx_bpsk)"), None, Some(&locals))?
+            .eval(
+                &CString::new("p_vals(tx_bpsk)").unwrap(),
+                None,
+                Some(&locals),
+            )?
             .extract()?;
         let x: Vec<f64> = linspace(1e-10, 5f64, cdma_p_vals.len()).collect();
         plot!(x, bpsk_p_vals, cdma_p_vals, "/tmp/willie_001.png");

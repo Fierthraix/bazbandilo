@@ -5,12 +5,6 @@ use std::ffi::CString;
 
 pub mod ber;
 
-macro_rules! c {
-    ($str:expr) => {{
-        &CString::new($str).unwrap()
-    }};
-}
-
 macro_rules! energy_samples_bits {
     ($tx_fn:expr, $min_samples:expr) => {{
         let mut num_bits: usize = $min_samples;
@@ -51,9 +45,12 @@ macro_rules! init_matplotlib {
         let locals = [("matplotlib", matplotlib), ("plt", plt)]
             .into_py_dict($py)
             .unwrap();
-        // let asdf = CString::new().unwrap();
-        $py.eval(c!("matplotlib.use('agg')"), None, Some(&locals))
-            .unwrap();
+        $py.eval(
+            &CString::new("matplotlib.use('agg')").unwrap(),
+            None,
+            Some(&locals),
+        )
+        .unwrap();
         locals
     }};
 }
@@ -68,19 +65,23 @@ macro_rules! plot {
             // let fig_axes: (&PyObject, &PyObject) = py
             let (fig, axes): (PyObject, PyObject) = py
                 // let fig_axes: PyObject = py
-                .eval(c!("plt.subplots(1)"), None, Some(&locals))
+                .eval(
+                    &CString::new("plt.subplots(1)").unwrap(),
+                    None,
+                    Some(&locals),
+                )
                 .unwrap()
                 .extract()
                 .unwrap();
             locals.set_item("fig", fig).unwrap();
             locals.set_item("axes", axes).unwrap();
             for line in [
-                c!("fig.set_size_inches(16, 9)"),
-                c!("axes.plot(x, y)"),
-                c!(format!("fig.savefig('{}')", $name)),
-                c!("plt.close('all')"),
+                CString::new("fig.set_size_inches(16, 9)").unwrap(),
+                CString::new("axes.plot(x, y)").unwrap(),
+                CString::new(format!("fig.savefig('{}')", $name)).unwrap(),
+                CString::new("plt.close('all')").unwrap(),
             ] {
-                py.eval(line, None, Some(&locals)).unwrap();
+                py.eval(&line, None, Some(&locals)).unwrap();
             }
         })
     };
@@ -95,25 +96,37 @@ macro_rules! plot {
             locals.set_item("y1", &$y1).unwrap();
             locals.set_item("y2", &$y2).unwrap();
             let (fig, axes): (PyObject, PyObject) = py
-                .eval(c!("plt.subplots(1)"), None, Some(&locals))
+                .eval(
+                    &CString::new("plt.subplots(1)").unwrap(),
+                    None,
+                    Some(&locals),
+                )
                 .unwrap()
                 .extract()
                 .unwrap();
             locals.set_item("fig", fig).unwrap();
             locals.set_item("axes", axes).unwrap();
-            py.eval(c!("fig.set_size_inches(16, 9)"), None, Some(&locals))
-                .unwrap();
+            py.eval(
+                &CString::new("fig.set_size_inches(16, 9)").unwrap(),
+                None,
+                Some(&locals),
+            )
+            .unwrap();
             if $log {
-                py.eval(c!("axes.set_yscale('log')"), None, Some(&locals))
-                    .unwrap();
+                py.eval(
+                    &CString::new("axes.set_yscale('log')").unwrap(),
+                    None,
+                    Some(&locals),
+                )
+                .unwrap();
             }
             for line in [
-                c!("axes.plot(x, y1)"),
-                c!("axes.plot(x, y2)"),
-                c!(format!("fig.savefig('{}')", $name)),
-                c!("plt.close('all')"),
+                CString::new("axes.plot(x, y1)").unwrap(),
+                CString::new("axes.plot(x, y2)").unwrap(),
+                CString::new(format!("fig.savefig('{}')", $name)).unwrap(),
+                CString::new("plt.close('all')").unwrap(),
             ] {
-                py.eval(line, None, Some(&locals)).unwrap();
+                py.eval(&line, None, Some(&locals)).unwrap();
             }
         })
     };
@@ -159,20 +172,28 @@ macro_rules! dot_plot {
             locals.set_item("i", &$i).unwrap();
             locals.set_item("q", &$q).unwrap();
             let (fig, axes): (PyObject, PyObject) = py
-                .eval(c!("plt.subplots(1)"), None, Some(&locals))
+                .eval(
+                    &CString::new("plt.subplots(1)").unwrap(),
+                    None,
+                    Some(&locals),
+                )
                 .unwrap()
                 .extract()
                 .unwrap();
             locals.set_item("fig", fig).unwrap();
             locals.set_item("axes", axes).unwrap();
-            py.eval(c!("fig.set_size_inches(16, 9)"), None, Some(&locals))
-                .unwrap();
+            py.eval(
+                &CString::new("fig.set_size_inches(16, 9)").unwrap(),
+                None,
+                Some(&locals),
+            )
+            .unwrap();
             for line in [
-                c!("axes.plot(i, q, marker='.', linestyle='None')"),
-                c!(format!("fig.savefig('{}')", $name)),
-                c!("plt.close('all')"),
+                CString::new("axes.plot(i, q, marker='.', linestyle='None')").unwrap(),
+                CString::new(format!("fig.savefig('{}')", $name)).unwrap(),
+                CString::new("plt.close('all')").unwrap(),
             ] {
-                py.eval(line, None, Some(&locals)).unwrap();
+                py.eval(&line, None, Some(&locals)).unwrap();
             }
         })
     };

@@ -12,11 +12,11 @@ use serde::{Deserialize, Serialize};
 
 pub const NUM_SAMPLES: usize = 65536;
 
-// pub const NUM_ATTEMPTS: usize = 100;
+// For faster testing, reduce the number of attempts
 pub const NUM_ATTEMPTS: usize = 1000;
 
 lazy_static! {
-    // pub static ref snrs_db: Vec<f64> = linspace(-45f64, 12f64, 15).collect();
+    // For faster testing, use fewer SNR points
     pub static ref snrs_db: Vec<f64> = linspace(-45f64, 12f64, 150).collect();
     pub static ref snrs_lin: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
 }
@@ -134,14 +134,17 @@ fn normal_detect(signal: &[Complex<f64>]) -> f64 {
     Python::with_gil(|py| {
         let normtest: Py<PyAny> = PyModule::from_code(
             py,
-            c!("import scipy
+            &CString::new(
+                "import scipy
 import numpy as np
 def p_vals(signal_im, signal_re):
     t1 = scipy.stats.normaltest(signal_re).statistic
     t2 = scipy.stats.normaltest(signal_im).statistic
-    return np.mean([t1, t2])"),
-            c!(""),
-            c!(""),
+    return np.mean([t1, t2])",
+            )
+            .unwrap(),
+            &CString::new("").unwrap(),
+            &CString::new("").unwrap(),
         )
         .unwrap()
         .getattr("p_vals")
@@ -156,7 +159,11 @@ def p_vals(signal_im, signal_re):
         locals.set_item("signal_im", signal_im).unwrap();
 
         let λ: f64 = py
-            .eval(c!("normtest(signal_re, signal_im)"), None, Some(&locals))
+            .eval(
+                &CString::new("normtest(signal_re, signal_im)").unwrap(),
+                None,
+                Some(&locals),
+            )
             .unwrap()
             .extract()
             .unwrap();

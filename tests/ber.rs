@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use util::ber::{ber_bfsk, ber_bpsk, ber_qam, ber_qpsk};
 
 use convert_case::{Case, Casing};
-use kdam::{par_tqdm, BarExt};
+use kdam::{BarExt, par_tqdm};
 use num_complex::Complex;
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
@@ -307,7 +307,11 @@ fn main() {
         locals.set_item("snrs_db", &snrs_db).unwrap();
 
         let (fig, axes): (PyObject, PyObject) = py
-            .eval(c!("plt.subplots(1)"), None, Some(&locals))
+            .eval(
+                &CString::new("plt.subplots(1)").unwrap(),
+                None,
+                Some(&locals),
+            )
             .unwrap()
             .extract()
             .unwrap();
@@ -320,10 +324,11 @@ fn main() {
             let py_name = format!("bers_{}", ber_result.name).to_case(Case::Snake);
             locals.set_item(&py_name, &ber_result.bers).unwrap();
             py.eval(
-                c!(format!(
+                &CString::new(format!(
                     "axes.plot(snrs_db[:len({})], {}, label='{}')",
                     py_name, py_name, ber_result.name
-                )),
+                ))
+                .unwrap(),
                 None,
                 Some(&locals),
             )
@@ -335,13 +340,13 @@ fn main() {
 
         for line in [
             // "axes.plot(snrs_db, bpsk_theory, label='BPSK Theoretical')",
-            c!("axes.legend(loc='best')"),
-            c!("axes.set_yscale('log')"),
-            c!("axes.set_xlabel('SNR (dB)')"),
-            c!("axes.set_ylabel('BER')"),
-            c!("plt.show()"),
+            CString::new("axes.legend(loc='best')").unwrap(),
+            CString::new("axes.set_yscale('log')").unwrap(),
+            CString::new("axes.set_xlabel('SNR (dB)')").unwrap(),
+            CString::new("axes.set_ylabel('BER')").unwrap(),
+            CString::new("plt.show()").unwrap(),
         ] {
-            py.eval(line, None, Some(&locals)).unwrap();
+            py.eval(&line, None, Some(&locals)).unwrap();
         }
     });
 }
