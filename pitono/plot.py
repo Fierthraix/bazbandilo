@@ -129,7 +129,7 @@ def plot_pd_with_multiple_modulations(
 ):
     fig, ax = plt.subplots()
     ax.grid(True, which="both")
-    ax.set_xlabel("SNR (db)")
+    ax.set_xlabel("SNR (dB)")
     ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)")
     if cycles:
         ax.set_prop_cycle(cycles)
@@ -155,7 +155,7 @@ def plot_pd_vs_snr_cfar(
     """Plot $P_D$ versus SNR for multiple $P_{FA}$s."""
     fig, ax = plt.subplots()
     ax.grid(True, which="both")
-    ax.set_xlabel("SNR (db)")
+    ax.set_xlabel("SNR (dB)")
     ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)")
     ax.set_prop_cycle(get_cycles(len(modulation[kind]["pfas"])))
     snrs_db = db(modulation["snrs"])

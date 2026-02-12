@@ -2,6 +2,7 @@
 import numpy as np
 from typing import List
 
+
 def plot_ssca_triangle(s, log=True):
     import matplotlib.pyplot as plt
 

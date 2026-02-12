@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from cfar import parse_results
-from plot import FIG_SIZE, base_parser, load_json, multi_parse, save_figure
+from plot import base_parser, load_json, multi_parse, save_figure
 from util import db, timeit, undb
 
 from argparse import Namespace

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 from cfar import calculate_pd, get_threshold
-from plot import save_figure
+from plot import save_figure, base_parser
 
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy.stats import rv_histogram
 from sklearn import metrics
+from typing import List, Optional
 
 
 def calc_tpr_fpr(pfa: float, h0_samps: np.ndarray, h1_samps: np.ndarray):
@@ -21,14 +22,59 @@ def calc_tpr_fpr(pfa: float, h0_samps: np.ndarray, h1_samps: np.ndarray):
     return tpr, fpr
 
 
+def plot_h0_pdf(
+    x: List[float],
+    h0_pdf: List[float],
+    cfar_line: bool = False,
+    save_path: Optional[Path] = None,
+):
+    fig, ax = plt.subplots()
+    ax.grid(True, which="both")
+    ax.set_ylabel(r"$\mathbb{P}(\lambda)$")
+    ax.set_xlabel(r"Detector Output $\lambda$")
+    ax.plot(x, h0_pdf, label=r"$\mathbb{P}(\lambda|H_0)$")
+    if cfar_line:
+        ax.axvline(
+            cfar_threshold,
+            color="k",
+            ls="--",
+            label=r"Threshold for $\mathbb{P}_{FA}=" f"{cfar_pfa}$",
+        )
+    ax.legend(loc="best")
+    save_figure(fig, save_path, fig_size=(8, 4.5))
+
+
+def plot_pdfs(
+    x: List[float],
+    h0_pdf: List[float],
+    h1_pdf: List[float],
+    cfar_line: bool = False,
+    save_path: Optional[Path] = None,
+):
+    fig, ax = plt.subplots()
+    ax.grid(True, which="both")
+    ax.set_ylabel(r"$\mathbb{P}(\lambda)$")
+    ax.set_xlabel(r"Detector Output $\lambda$")
+    ax.plot(x, h0_pdf, label=r"$\mathbb{P}(\lambda|H_0)$")
+    ax.plot(x, h1_pdf, label=r"$\mathbb{P}(\lambda|H_1)$")
+    if cfar_line:
+        ax.axvline(
+            cfar_threshold,
+            color="k",
+            ls="--",
+            label=r"Threshold for $\mathbb{P}_{FA}=" f"{cfar_pfa}$",
+        )
+    ax.legend(loc="best")
+    save_figure(fig, save_path, fig_size=(8, 4.5))
+
+
 if __name__ == "__main__":
     binification = 128
     # Get Points
     num_iters: int = 9001
 
     GRAPHS_DIR = Path(__file__).parent.parent / "final" / "graphs"
-
-    SAVE: bool = False
+    args = base_parser().parse_args()
 
     # These values represent the output statistic
     # of the detector in the H0 and H1 scenarios.
@@ -54,22 +100,18 @@ if __name__ == "__main__":
     cfar_tpr = calculate_pd(cfar_pfa, h0_samps, h1_samps)
 
     # Plot the PDFs of the H0 and H1 cases.
-    fig, ax = plt.subplots()
-    ax.grid(True, which="both")
-    ax.set_ylabel(r"$\mathbb{P}(\lambda)$")
-    ax.set_xlabel(r"Detector Output $\lambda$")
-    ax.plot(x, h0_pdf, label=r"$\mathbb{P}(\lambda|H_0)$")
-    ax.plot(x, h1_pdf, label=r"$\mathbb{P}(\lambda|H_1)$")
-    # ax.axvline(cut_off.x, color="k", ls="--")
-    ax.axvline(
-        cfar_threshold,
-        color="k",
-        ls="--",
-        label=r"Threshold for $\mathbb{P}_{FA}=" f"{cfar_pfa}$",
+    plot_h0_pdf(x, h0_pdf, cfar_line=False, save_path=args.save_dir / "pd:h0:example.png")
+    plot_h0_pdf(x, h0_pdf, cfar_line=True, save_path=args.save_dir / "pd:h0:example:line.png")
+    plot_pdfs(
+        x, h0_pdf, h1_pdf, cfar_line=False, save_path=args.save_dir / "pd:example.png"
     )
-    ax.legend(loc="best")
-    if SAVE:
-        save_figure(fig, GRAPHS_DIR / "pd:example.png", fig_size=(8, 4.5))
+    plot_pdfs(
+        x,
+        h0_pdf,
+        h1_pdf,
+        cfar_line=True,
+        save_path=args.save_dir / "pd:example:line.png",
+    )
 
     tpr, fpr = calc_tpr_fpr(cfar_pfa, h0_samps, h1_samps)
     auc = metrics.auc(fpr, tpr)
@@ -93,8 +135,7 @@ if __name__ == "__main__":
     ax.set_ylabel("True Positive Rate")
     ax.set_xlabel("False Positive Rate")
     ax.legend(loc=4)
-    if SAVE:
-        save_figure(fig, GRAPHS_DIR / "roc:example.png")
+    save_figure(fig, args.save_dir / "roc:example.png")
     ax.set_title("ROC Curve")
 
     plt.show()
