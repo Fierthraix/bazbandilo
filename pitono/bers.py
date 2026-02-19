@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from plot import base_parser, plot_bers, load_json
+from plot import base_parser, plot_bers, load_json, set_snr_xlim
 
 from argparse import Namespace
 import matplotlib.pyplot as plt
@@ -15,6 +15,7 @@ def parse_args() -> Namespace:
 
 if __name__ == "__main__":
     args = parse_args()
+    set_snr_xlim(args.snr_db_min, args.snr_db_max)
     regex = re.compile(args.regex)
 
     bers = load_json(args.ber_file, filter=regex)

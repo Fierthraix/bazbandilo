@@ -10,6 +10,7 @@ from plot import (
     plot_pd_vs_ber,
     plot_pd_vs_ber_metric,
     plot_λ_vs_snr,
+    set_snr_xlim,
 )
 
 from argparse import Namespace
@@ -79,6 +80,7 @@ if __name__ == "__main__":
     CWD: Path = Path(__file__).parent
 
     args = parse_args()
+    set_snr_xlim(args.snr_db_min, args.snr_db_max)
 
     print("Starting CFAR Analysis...")
 

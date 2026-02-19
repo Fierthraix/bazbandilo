@@ -13,6 +13,7 @@ from plot import (
     plot_pd_with_multiple_modulations,
     plot_pd_vs_ber_metric,
     plot_λ_vs_snr,
+    set_snr_xlim,
 )
 from util import timeit
 
@@ -34,6 +35,7 @@ if __name__ == "__main__":
     import sys
 
     args = parse_args()
+    set_snr_xlim(args.snr_db_min, args.snr_db_max)
     if args.group:
         group_ids = [args.group]
     else:

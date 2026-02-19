@@ -7,6 +7,7 @@ from plot import (
     load_json,
     multi_parse,
     plot_pd_with_multiple_modulations,
+    set_snr_xlim,
 )
 
 from argparse import Namespace
@@ -56,6 +57,7 @@ if __name__ == "__main__":
     CWD: Path = Path(__file__).parent
 
     args: Namespace = parse_args()
+    set_snr_xlim(args.snr_db_min, args.snr_db_max)
 
     print("Starting TW Product Analysis...")
 

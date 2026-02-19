@@ -6,6 +6,7 @@ from plot import (
     load_json,
     plot_pd_vs_snr_cfar,
     multi_parse,
+    set_snr_xlim,
 )
 from util import timeit
 
@@ -34,6 +35,7 @@ if __name__ == "__main__":
     CWD: Path = Path(__file__).parent
 
     args = parse_args()
+    set_snr_xlim(args.snr_db_min, args.snr_db_max)
 
     print("Starting CFAR Analysis...")
 

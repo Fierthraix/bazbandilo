@@ -21,6 +21,8 @@ FIG_SIZE: Tuple[float, float] = (12, 7)
 NCOLS: int = 2
 
 BER_YLIM: List[float] = [1e-5, 0.55]
+SNR_DB_MIN: Optional[float] = None
+SNR_DB_MAX: Optional[float] = None
 
 DETECTORS: List[str] = ["Energy", "MaxCut", "Dcs", "NormalTest"]
 
@@ -93,6 +95,22 @@ GROUP_MARKERS: Dict[int, cycler] = {
 }
 
 
+def set_snr_xlim(snr_db_min: Optional[float], snr_db_max: Optional[float]) -> None:
+    global SNR_DB_MIN, SNR_DB_MAX
+    SNR_DB_MIN = snr_db_min
+    SNR_DB_MAX = snr_db_max
+
+
+def resolve_snr_xlim(default_min: float, default_max: float) -> Tuple[float, float]:
+    x_min = default_min if SNR_DB_MIN is None else SNR_DB_MIN
+    x_max = default_max if SNR_DB_MAX is None else SNR_DB_MAX
+    if x_min >= x_max:
+        raise ValueError(
+            f"Invalid SNR x-limit range: min={x_min} must be less than max={x_max}."
+        )
+    return x_min, x_max
+
+
 def get_cycles(num_lines: int) -> cycler:
     colours: List[str] = [
         "#1f77b4",
@@ -129,13 +147,13 @@ def plot_pd_with_multiple_modulations(
 ):
     fig, ax = plt.subplots()
     ax.grid(True, which="both")
-    ax.set_xlabel("SNR (dB)")
+    ax.set_xlabel("SNR (db)")
     ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)")
     if cycles:
         ax.set_prop_cycle(cycles)
 
     snrs_db = db(snrs)
-    ax.set_xlim(snrs_db.min(), snrs_db.max())
+    ax.set_xlim(*resolve_snr_xlim(float(snrs_db.min()), float(snrs_db.max())))
     ax.set_ylim([0, 1.025])
 
     for name, pd_curve in pds:
@@ -155,11 +173,11 @@ def plot_pd_vs_snr_cfar(
     """Plot $P_D$ versus SNR for multiple $P_{FA}$s."""
     fig, ax = plt.subplots()
     ax.grid(True, which="both")
-    ax.set_xlabel("SNR (dB)")
+    ax.set_xlabel("SNR (db)")
     ax.set_ylabel(r"Probability of Detection ($\mathbb{P}_D$)")
     ax.set_prop_cycle(get_cycles(len(modulation[kind]["pfas"])))
     snrs_db = db(modulation["snrs"])
-    ax.set_xlim(snrs_db.min(), snrs_db.max())
+    ax.set_xlim(*resolve_snr_xlim(float(snrs_db.min()), float(snrs_db.max())))
     ax.set_ylim([0, 1.025])
     for pfa, pds in modulation[kind]["pfas"].items():
         ax.plot(snrs_db, pds, label=f"$P_{{FA}}={pfa}$")
@@ -176,11 +194,12 @@ def plot_pd_vs_ber(
     save_path: Optional[Path] = None,
 ):
     fig, ax = plt.subplots()
-    ax.set_xlim(db([snrs]).min(), db([snrs]).max())
+    snrs_db = db(snrs)
+    ax.set_xlim(*resolve_snr_xlim(float(snrs_db.min()), float(snrs_db.max())))
     ber_ax = ax
     pd_ax = ax.twinx()
     ber_ax.grid(True, which="both")
-    ber_ax.plot(db(snrs)[: len(bers)], bers, color="Red")
+    ber_ax.plot(snrs_db[: len(bers)], bers, color="Red")
     ber_ax.set_yscale("log")
     ber_ax.set_ylim(BER_YLIM)
     ber_ax.tick_params(axis="y", colors="Red")
@@ -190,7 +209,7 @@ def plot_pd_vs_ber(
     for (detector_name, pds), style in zip(pds, linestyles):
         try:
             pd_ax.plot(
-                db(snrs),
+                snrs_db,
                 pds,
                 color="Blue",
                 linestyle=style,
@@ -228,7 +247,7 @@ def plot_bers(
     ax.legend(loc="best", ncols=NCOLS)
     ax.set_yscale("log")
     ax.set_ylim(BER_YLIM)
-    ax.set_xlim([-20, 20])
+    ax.set_xlim(*resolve_snr_xlim(-20, 20))
 
     save_figure(fig, save_path)
     if ebn0:
@@ -294,9 +313,10 @@ def plot_λ_vs_snr(
     ax.grid(True, which="both")
     if cycles:
         ax.set_prop_cycle(cycles)
+    snrs_db = db(snrs)
     for name, λs in λs:
-        ax.plot(db(snrs), λs, label=name)
-        ax.set_xlim(db(snrs).min(), db(snrs).max())
+        ax.plot(snrs_db, λs, label=name)
+        ax.set_xlim(*resolve_snr_xlim(float(snrs_db.min()), float(snrs_db.max())))
     ax.set_xlabel("SNR (dB)")
     ax.set_ylabel("Threshold λ")
     ax.legend(loc="best", ncols=NCOLS)
@@ -381,6 +401,8 @@ def base_parser() -> ArgumentParser:
     )
     ap.add_argument("-s", "--save", action="store_true")
     ap.add_argument("-d", "--save-dir", type=Path, default=Path("/tmp/"))
+    ap.add_argument("--snr-db-min", default=None, type=float)
+    ap.add_argument("--snr-db-max", default=None, type=float)
     return ap
 
 

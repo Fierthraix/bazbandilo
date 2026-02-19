@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from plot import GROUP_MARKERS, GROUPS, base_parser, plot_bers, load_json
+from plot import GROUP_MARKERS, GROUPS, base_parser, plot_bers, load_json, set_snr_xlim
 
 from argparse import Namespace
 import re
@@ -19,6 +19,7 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
     args = parse_args()
+    set_snr_xlim(args.snr_db_min, args.snr_db_max)
     if args.group:
         group_ids = [args.group]
     else:
