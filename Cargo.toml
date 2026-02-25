@@ -1,7 +1,7 @@
 [package]
 name = "bazbandilo"
 description = "A chaotic communications simulator."
-version = "1.0.0"
+version = "1.2.0"
 license = "GPL-3.0-or-later"
 edition = "2024"
 homepage = "https://github.com/Fierthraix/bazbandilo"
@@ -18,16 +18,16 @@ itertools = "0.14"
 ndarray = "0.16"
 ndrustfft = "0.5"
 num = "0.4"
-numpy = "0.23"
+numpy = "0.27"
 num-complex = "0.4"
-rand = {version = "0.9", features = ["std_rng"]}
+rand = { version = "0.9", features = ["std_rng"] }
 rand_distr = "0.5"
 realfft = "3.3"
 reed-solomon = "0.2"
 rustfft = "6.2"
 sci-rs = "0.4"
 smallvec = "1.13"
-pyo3 = { version = "0.23", features = ["auto-initialize", "num-complex"]}
+pyo3 = { version = "0.27", features = ["auto-initialize", "num-complex"] }
 
 # Needed until this is resolved: https://github.com/PyO3/pyo3/issues/341
 [features]
@@ -37,13 +37,13 @@ extension-module = ["pyo3/extension-module"]
 average = "0.15.1"
 csv = "1.3"
 convert_case = "0.7"
-kdam = {version = "0.6", features = ["rayon"]}
+kdam = { version = "0.6", features = ["rayon"] }
 lazy_static = "1.5"
 num_cpus = "1.0"
 rayon = "1.10"
 rstest = "0.24"
 welch-sde = "0.1"
-serde = {version = "1.0", features=["derive"]}
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
 rmp-serde = "1.3"
 

@@ -23,7 +23,7 @@ clean:
 	-rm "{{ ffi_dir }}"/*.so
 
 make:
-	uv run maturin develop
+	uv run --no-default-groups --group build maturin develop --uv -F extension-module
 
 [no-cd]
 interactive *kargs:
