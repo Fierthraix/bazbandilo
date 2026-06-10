@@ -1,3 +1,4 @@
+use std::env;
 use std::ffi::CString;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -130,7 +131,10 @@ macro_rules! BitErrorTest {
 fn main() {
     // let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 15).collect();
     // let snrs_db: Vec<f64> = linspace(-45f64, 12f64, 150).collect();
-    let snrs_db: Vec<f64> = linspace(-20f64, 20f64, 150).collect();
+    let snr_min = env::var("BER_SNR_MIN").ok().and_then(|s| s.parse().ok()).unwrap_or(-20f64);
+    let snr_max = env::var("BER_SNR_MAX").ok().and_then(|s| s.parse().ok()).unwrap_or(20f64);
+    let snr_count = env::var("BER_SNR_COUNT").ok().and_then(|s| s.parse().ok()).unwrap_or(150usize);
+    let snrs_db: Vec<f64> = linspace(snr_min, snr_max, snr_count).collect();
 
     let snrs: Vec<f64> = snrs_db.iter().cloned().map(undb).collect();
 
@@ -271,19 +275,26 @@ fn main() {
         ),
     ];
 
+    let only: Option<Vec<String>> = env::var("BER_ONLY")
+        .ok()
+        .map(|s| s.split(',').map(|part| part.trim().to_string()).filter(|part| !part.is_empty()).collect());
+    let output_path = env::var("BER_OUTPUT").unwrap_or_else(|_| String::from("/tmp/bers.json"));
+
     let bers: Vec<BitErrorResults> = {
         let mut results = Vec::with_capacity(harness.len());
         for modulation in harness {
+            if only.as_ref().is_some_and(|names| !names.iter().any(|name| name == &modulation.name)) {
+                continue;
+            }
             let result = modulation.calc_bers();
             results.push(result);
             {
                 // Save the results to a JSON file.
-                let name = "/tmp/bers.json";
-                let file = File::create(name).unwrap();
+                let file = File::create(&output_path).unwrap();
                 let mut writer = BufWriter::new(file);
                 serde_json::to_writer(&mut writer, &results).unwrap();
                 writer.flush().unwrap();
-                println!("Saved {}", name);
+                println!("Saved {}", output_path);
             }
         }
         results
